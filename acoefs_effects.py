@@ -82,7 +82,7 @@ def test_profile(l=1, acoefs=[1,0,0,0,0,0], theta0=np.pi/2, delta=2*np.pi*8.4/18
     plt.show()
 
 
-def acoefs_epsilon(l, a1=2.5, Dnu=135.1, nu_nl=3150.):
+def acoefs_epsilon(l, a1=2.5, Dnu=135.1, nu_nl=3150., ftype='gate'):
     '''
         For a given degree l, rotation a1 and Dnu (translates into density), compute the
         odds a-acoeficients in presence of a centrifugal distorsion and of an activity
@@ -134,7 +134,7 @@ def acoefs_epsilon(l, a1=2.5, Dnu=135.1, nu_nl=3150.):
         print('  epsi =', epsi,  '    anl_eq:', anl_eq ,  '    anl_polar:', anl_polar)
     return epsilon_nl, acoefs_eq, acoefs_polar
 
-def a2_epsilon_plot(lrange=[1,2, 3], colors=['Blue', 'Orange', 'Red']):
+def a2_epsilon_plot(lrange=[1,2, 3], colors=['Blue', 'Orange', 'Red'], ftype='gate'):
     '''
         Make same plots than Fig3 of Gizon2004 AN 323, 251
         We impose basically the same values as what Gizon2004 did
@@ -143,7 +143,7 @@ def a2_epsilon_plot(lrange=[1,2, 3], colors=['Blue', 'Orange', 'Red']):
     #lrange[1]=lrange[1]
     for l in lrange:
         print('l =', l)
-        epsilon_nl, acoefs_eq, acoefs_polar=acoefs_epsilon(l, a1=2.5, Dnu=135.1, nu_nl=3150.)
+        epsilon_nl, acoefs_eq, acoefs_polar=acoefs_epsilon(l, a1=2.5, Dnu=135.1, nu_nl=3150.,ftype=ftype)
         a2_eq=[row[1] for row in acoefs_eq]
         #a4_eq=[row[3] for row in acoefs_eq]
         #a6_eq=[row[5] for row in acoefs_eq]
