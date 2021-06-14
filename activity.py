@@ -54,17 +54,6 @@ def show_filters(theta0=np.pi/6, delta=np.pi/10):
 	plt.show()
 
 
-# -----
-
-def test_integrate_ylm2(l):
-    phi_range = [0, 2.*np.pi]
-    theta_range = [0, np.pi/4.]
-    print("Ylm2(", l, "):")
-    for m in range(-l, l+1):
-        integral=integrate_ylm2(l, m, phi_range, theta_range)
-        print("(l=" , l, ", m=", m, ") =" , "   ", integral[0])
-
-
 def Alm_gate(_theta, _phi, _l, _m, _theta0, _delta):
 	Y=Ylm2(_theta, _phi, _l, _m)
 	F=gate_filter(_theta, _theta0, _delta)
@@ -106,3 +95,39 @@ def Alm(l,m, theta0=np.pi/2, delta=2*8.4*np.pi/180, ftype='gate'):
     theta_range = [0, np.pi]
     integral=integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype=ftype)
     return integral[0]
+
+def test_gate_filter():
+	delta = np.pi/6;
+	theta0= np.pi/2;
+	for i in range(21):
+		theta=i*np.pi/20;
+		F=gate_filter(theta, theta0, delta);
+		print("theta : ", theta,"     F=",F)
+
+def test_gauss_filter():
+	delta = np.pi/6;
+	theta0= np.pi/2;
+	Fmax=gauss_filter_cte(theta0, delta)
+	for i in range(21):
+		theta=i*np.pi/20;
+		F=gauss_filter(theta, theta0, delta);
+		print("theta : ", theta,"     F=",F/Fmax)
+# -----
+
+def test_integrate_ylm2(l):
+    phi_range = [0, 2.*np.pi]
+    theta_range = [0, np.pi/4.]
+    print("Ylm2(", l, "):")
+    for m in range(-l, l+1):
+        integral=integrate_ylm2(l, m, phi_range, theta_range)
+        print("(l=" , l, ", m=", m, ") =" , "   ", integral[0])
+
+def test_integrate_Alm(l, theta0=np.pi/2, delta=np.pi/6):
+    phi_range = [0, 2.*np.pi]
+    theta_range=[0, np.pi]
+    for m in range(-l, l+1):
+        integral=integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype='gate')
+        print("Alm_gate(l=" , l, ", m=", m, ") =" , "   ", integral[0])
+        integral=integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype='gauss')
+        print("Alm_gauss(l=" , l, ", m=", m, ") =" , "   ", integral[0])
+
