@@ -189,6 +189,47 @@ def nunlm_from_acoefs(nunl0, l, a1=0, a2=0, a3=0,a4=0,a5=0,a6=0):
 		nu_nlm.append(val)
 	return nu_nlm
 
+def Tnlm(nu_nlm, l):
+	if l == 0:
+		print(" Please enter a value of 0<l<4")
+		return []
+	if l == 1:
+		Tn11=(nu_nlm[2]- nu_nlm[0])/2
+		return [Tn11]
+	if l == 2:
+		Tn21=(nu_nlm[3]-nu_nlm[1])/2
+		Tn22=(nu_nlm[4]-nu_nlm[0])/4
+		return [Tn21, Tn22]
+	if l == 3:
+		Tn31=(nu_nlm[4]-nu_nlm[2])/2
+		Tn32=(nu_nlm[5]-nu_nlm[1])/4
+		Tn33=(nu_nlm[6]-nu_nlm[0])/6
+		return [Tn31,Tn32, Tn33]
+	if l > 3:
+		print("Please enter a value of 0<l<4")
+		return []
+
+def Snlm(nu_nlm, l):
+	if l == 0:
+		print(" Please enter a value of 0<l<4")
+		return []
+	if l==1:   
+		Sn11=(nu_nlm[0] + nu_nlm[2])/2 - nu_nlm[1]
+		return [Sn11]
+	if l==2:
+		Sn21=(nu_nlm[1] + nu_nlm[3])/2 - nu_nlm[2]
+		Sn22=(nu_nlm[0] + nu_nlm[4])/2 - nu_nlm[2]
+		return [Sn21,Sn22]
+	if l==3:
+		Sn31=(nu_nlm[2] + nu_nlm[4])/2 - nu_nlm[3]
+		Sn32=(nu_nlm[1] + nu_nlm[5])/2 - nu_nlm[3]
+		Sn33=(nu_nlm[0] + nu_nlm[6])/2 - nu_nlm[3]
+		return [Sn31,Sn32,Sn33]
+	if l > 3:
+		print("Please enter a value of 0<l<4")
+		return []
+
+
 def test_acoef(l=1, a1=1, a2=0, a3=0, a4=0, a5=0, a6=0, nu_nl=1000.):
 	'''
 		With this function you can see whether by putting some input
@@ -197,37 +238,17 @@ def test_acoef(l=1, a1=1, a2=0, a3=0, a4=0, a5=0, a6=0, nu_nl=1000.):
 	'''
 	nu_nlm=nunlm_from_acoefs(nu_nl, l, a1=a1, a2=a2, a3=a3,a4=a4,a5=a5,a6=a6)
 	print("nu_nlm:", nu_nlm)
+
 	print("  Tnlm : ")
-	if l==1:
-		print("Tn11  = ", (nu_nlm[2]- nu_nlm[0])/2)
-	if l==2:
-		Tn21=(nu_nlm[3]-nu_nlm[1])/2
-		Tn22=(nu_nlm[4]-nu_nlm[0])/4
-		print("Tn21 = ", Tn21)
-		print("Tn22 = ", Tn22)
-	if l==3:
-		Tn31=(nu_nlm[4]-nu_nlm[2])/2
-		Tn32=(nu_nlm[5]-nu_nlm[1])/4
-		Tn33=(nu_nlm[6]-nu_nlm[0])/6
-		print("Tn31 = ", Tn31)
-		print("Tn32 = ", Tn32)
-		print("Tn33 = ", Tn33)
-		
+	Tn=Tnlm(nu_nlm, l)
+	for m in range(len(Tn)):
+		print("Tn"+str(l)+str(m+1)+"  = ", Tn[m])		
+
 	print(" Snlm : ")
-	if l==1:   
-		print("Sn11 = ", (nu_nlm[0] + nu_nlm[2])/2 - nu_nlm[1])
-	if l==2:
-		Sn21=(nu_nlm[1] + nu_nlm[3])/2 - nu_nlm[2]
-		Sn22=(nu_nlm[0] + nu_nlm[4])/2 - nu_nlm[2]
-		print("Sn21 = ", Sn21)
-		print("Sn22 = ", Sn22)
-	if l==3:
-		Sn31=(nu_nlm[2] + nu_nlm[4])/2 - nu_nlm[3]
-		Sn32=(nu_nlm[1] + nu_nlm[5])/2 - nu_nlm[3]
-		Sn33=(nu_nlm[0] + nu_nlm[6])/2 - nu_nlm[3]
-		print("Sn31 = ", Sn31)
-		print("Sn32 = ", Sn32)
-		print("Sn33 = ", Sn33)
+	Sn=Snlm(nu_nlm, l)
+	for m in range(len(Sn)):
+		print("Sn"+str(l)+str(m+1)+"  = ", Sn[m])
+
 	print("Input a-coefficients:")
 	print("  anl =", [a1,a2,a3,a4,a5,a6])
 	print("Retrieved a-coefficients from the function eval_acoefs():")

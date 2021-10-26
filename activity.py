@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import special, integrate
 import itertools
-
+from subprocess import Popen, PIPE
+\
 def gauss_filter(theta, theta0, delta):
 	F=np.exp(-(theta - theta0)**2/(2*delta**2)) + np.exp(-(theta - np.pi + theta0)**2/(2*delta**2)) 
 	return F
@@ -53,6 +54,16 @@ def show_filters(theta0=np.pi/6, delta=np.pi/10):
 	plt.plot(theta, F2)
 	plt.show()
 
+# -----
+
+def test_integrate_ylm2(l):
+    phi_range = [0, 2.*np.pi]
+    theta_range = [0, np.pi/4.]
+    print("Ylm2(", l, "):")
+    for m in range(-l, l+1):
+        integral=integrate_ylm2(l, m, phi_range, theta_range)
+        print("(l=" , l, ", m=", m, ") =" , "   ", integral[0])
+
 
 def Alm_gate(_theta, _phi, _l, _m, _theta0, _delta):
 	Y=Ylm2(_theta, _phi, _l, _m)
@@ -75,59 +86,57 @@ def integrate_ylm2(l, m, phi_range, theta_range):
     return result
 
 def integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype='gate'):
-    if ftype == 'gate':
-    	result = integrate.dblquad(Alm_gate,
-         phi_range[0], phi_range[1], theta_range[0], theta_range[1], args=(l, m, theta0, delta,))
-    if ftype == 'gauss':
-    	result = integrate.dblquad(Alm_gauss,
-         phi_range[0], phi_range[1], theta_range[0], theta_range[1], args=(l, m, theta0, delta,))
-    if ftype != 'gate' and ftype != 'gauss':
-    	print("Wrong filter type argument: ")
-    	print("Use only:")
-    	print("    ftype='gate' or  ftype='gauss'")
-    	print("The program will exit now ")
-    	exit()
-    return result
+	if delta != 0:
+		if ftype == 'gate':
+			result = integrate.dblquad(Alm_gate,
+		     phi_range[0], phi_range[1], theta_range[0], theta_range[1], args=(l, m, theta0, delta,))
+		if ftype == 'gauss':
+			result = integrate.dblquad(Alm_gauss,
+		     phi_range[0], phi_range[1], theta_range[0], theta_range[1], args=(l, m, theta0, delta,))
+		if ftype != 'gate' and ftype != 'gauss':
+			print("Wrong filter type argument: ")
+			print("Use only:")
+			print("    ftype='gate' or  ftype='gauss'")
+			print("The program will exit now ")
+			exit()
+	else:
+		result=[0,0] # When delta is 0, obviously the result is 0
+	return result
 
+def Alm_cpp(l, theta0, delta, ftype, raw=False):
+	try:
+		process = Popen(["./Alm", str(l), str(theta0), str(delta), ftype], stdout=PIPE, stderr=PIPE)
+		(output, err) = process.communicate()
+		exit_code = process.wait()
+		#print(output)
+		output=output.decode("utf-8") 
+		if raw == False:
+			r=output.split('\n')
+			#config=[]
+			l=[]
+			m=[]
+			Alm=[]
+			for line in r:
+				line=line.strip()
+				#print("line =", line)
+				try:
+					if line[0] != "#":
+						s=line.split()
+						l.append(int(s[0]))
+						m.append(float(s[1]))
+						Alm.append(float(s[2]))
+				except:
+					err=True
+			return np.asarray(l),np.asarray(m),np.asarray(Alm)
+		else:
+			return output, err
+	except: # Handling processes that does not exist, aka, when  the Alm file is not available
+		error=True
+		print("Error: Could not execute the Alm C++ program. The most likely explanation is that it is not in the current directory")
+		return -1, error
 
-def Alm(l,m, theta0=np.pi/2, delta=2*8.4*np.pi/180, ftype='gate'):
+def Alm(l,m, theta0=np.pi/2, delta=2*8.4*np.pi/180, ftype='gate', cpp=True):
     phi_range = [0, 2.*np.pi]
     theta_range = [0, np.pi]
     integral=integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype=ftype)
     return integral[0]
-
-def test_gate_filter():
-	delta = np.pi/6;
-	theta0= np.pi/2;
-	for i in range(21):
-		theta=i*np.pi/20;
-		F=gate_filter(theta, theta0, delta);
-		print("theta : ", theta,"     F=",F)
-
-def test_gauss_filter():
-	delta = np.pi/6;
-	theta0= np.pi/2;
-	Fmax=gauss_filter_cte(theta0, delta)
-	for i in range(21):
-		theta=i*np.pi/20;
-		F=gauss_filter(theta, theta0, delta);
-		print("theta : ", theta,"     F=",F/Fmax)
-# -----
-
-def test_integrate_ylm2(l):
-    phi_range = [0, 2.*np.pi]
-    theta_range = [0, np.pi/4.]
-    print("Ylm2(", l, "):")
-    for m in range(-l, l+1):
-        integral=integrate_ylm2(l, m, phi_range, theta_range)
-        print("(l=" , l, ", m=", m, ") =" , "   ", integral[0])
-
-def test_integrate_Alm(l, theta0=np.pi/2, delta=np.pi/6):
-    phi_range = [0, 2.*np.pi]
-    theta_range=[0, np.pi]
-    for m in range(-l, l+1):
-        integral=integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype='gate')
-        print("Alm_gate(l=" , l, ", m=", m, ") =" , "   ", integral[0])
-        integral=integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype='gauss')
-        print("Alm_gauss(l=" , l, ", m=", m, ") =" , "   ", integral[0])
-
