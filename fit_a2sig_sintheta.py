@@ -125,10 +125,9 @@ def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 	acoefs=eval_acoefs(l, nu_nlm)
 	return acoefs[1] # returns only a2 
 
-def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
+def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, sintheta0, delta):
 	# Reject out or range solutions for theta0
-	pena=prior_uniform(theta0, 0, np.pi)
-	#pena=prior_uniform(theta0, -1, 1) # IF THETA0 IS ACTUALLY SIN(THETA0) (JUSTIFIED BY THE SAMPLING OF THE PRIOR)
+	pena=prior_uniform(np.arcsin(sintheta0), -1, 1)
 	# Reject absurd negative solutions and large 'spots' that exceed a pi/4 stellar coverage
 	pena=pena+prior_uniform(delta, 0, np.pi/4)
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
@@ -211,29 +210,43 @@ def test_do_simfile():
 def do_stats(variables, l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype):
 	#l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype = constants
 #	epsilon_nl, theta0, delta = variables
-	epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	epsilon_nl0, epsilon_nl1, sintheta0, delta = variables
+	#
+	# Compute the priors
+	P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, sintheta0, delta)
+	if np.isinf(P):
+		return -np.inf
+	if np.isnan(P):
+		print("---- GOT A NaN in Prior ----")
+		print("P = ", P)
+		print("      epsilon_nl0 = ", epsilon_nl0)
+		print("      epsilon_nl1 = ", epsilon_nl1)
+		print("      theta0      = ", sintheta0)
+		print('      delta       = ', delta)
+		print('Imposing -infinity to the Posterior in order to reject the solution')
+		#Posterior=-np.inf
+		return -np.inf
+	#
 	a2_nl_mod=[]
 	# Given the variables of the model, get a2 of the model a2_mod at the observed frequencies nu_nl_obs of each l and m modes
 	for i in range(len(nu_nl_obs)):
 		#print("espilons : ", epsilon_nl0, epsilon_nl1)
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl the 1e-3 is here for avoiding round off errors
 		#a2_mod=a2_model(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, ftype, l[i])
-		a2_mod=a2_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, ftype, l[i])
+		a2_mod=a2_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, np.arcsin(sintheta0), delta, ftype, l[i])
 		a2_nl_mod.append(float(a2_mod)*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
 	# Compare the observed and theoretical a2 using the least square method
 	L=likelihood_gauss(a2_nl_mod, a2_obs, sig_a2_obs)
-	# Add priors
-	P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta)
-	Posterior=L+P
-	if np.isnan(Posterior):
-		print("---- GOT A NaN ----")
-		print("L = ", L, "     P = ", P)
+	if np.isnan(L):
+		print("---- GOT A NaN in Likelihood ----")
+		print("L = ", L)
 		print("      epsilon_nl0 = ", epsilon_nl0)
 		print("      epsilon_nl1 = ", epsilon_nl1)
-		print("      theta0      = ", theta0)
+		print("      theta0      = ", sintheta0)
 		print('      delta       = ', delta)
 		print('Imposing -infinity to the Posterior in order to reject the solution')
-		Posterior=-np.inf
+		return -np.inf
+	Posterior=L+P
 	return Posterior
 
 def do_minimise(constants, variables_init):
@@ -249,8 +262,6 @@ def do_minimise(constants, variables_init):
 
 def do_emcee(constants, variables_init, nwalkers=100, niter=5000):
 	l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype=constants
-	#epsilon_nl0_init, epsilon_nl1_init, theta0_init, delta_init = variables_init
-
 	init_vars = variables_init + 1e-4 * np.random.randn(nwalkers, len(variables_init))
 	nwalkers, ndim = init_vars.shape
 	with Pool() as pool:
@@ -272,13 +283,12 @@ def get_errors(hessian):
 	return errors
 
 def do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med_params, ftype, fileout='model_plot.jpg'):
-	#med_params[2]=np.arcsin(med_params[2])
 		# The plot of the fit with some randomly chosen fits to represent the variance
 	fig, ax = plt.subplots()
 	a2_nl_mod_best_cpp=[]
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=med_params[0] + med_params[1]*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl the 1e-3 is here to avoid round off errors on the params
-		a2_mod_cpp=a2_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, med_params[2], med_params[3], ftype, el[i])
+		a2_mod_cpp=a2_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, np.arcsin(med_params[2]), med_params[3], ftype, el[i])
 		a2_nl_mod_best_cpp.append(float(a2_mod_cpp)*1e3)
 	ax.errorbar(nu_nl_obs, a2_obs, yerr=sig_a2_obs, fmt=".k", capsize=0)
 	ax.plot(nu_nl_obs, a2_nl_mod_best_cpp, "ro")#, '--', color='blue')
@@ -300,13 +310,13 @@ def test_do_minimise():
 	#
 	ftype='gauss' 
 	a1_obs=np.repeat(0., len(a2_obs))
-	labels = ["epsilon_nl0_out", "epsilon_nl1_out", "theta0_out", "delta_out"]
+	labels = ["epsilon_nl0", "epsilon_nl1", "sin(theta0", "delta"]
 	#labels = ["epsilon_nl0", "epsilon_nl1", "sin(theta0)", "delta"]
 	constants=el, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype
 	#variables    
 	epsilon_nl0_init=-1e-3
 	epsilon_nl1_init=0. # no slope initially
-	theta0_init=np.pi/2
+	theta0_init=np.sin(np.pi/4)
 	delta_init=np.pi/8
 	variables_init=epsilon_nl0_init, epsilon_nl1_init, theta0_init, delta_init
 	do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init, ftype, fileout='model_plot_init.jpg')
@@ -337,6 +347,7 @@ def test_do_minimise():
 		log_posterior = sampler.get_log_prob(discard=0, flat=True, thin=nwalkers)
 		log_prior= sampler.get_blobs(discard=0, flat=True, thin=nwalkers)
 	np.save('samples.npy', flat_samples)
+	np.save('labels.npy', labels)
 	np.save('logposterior.npy', log_posterior)
 	np.save('logprior.npy', log_prior)
 	#
