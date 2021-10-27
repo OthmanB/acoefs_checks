@@ -12,9 +12,16 @@ import os
 import corner
 
 
+## Definition of the Gaussian likelihood
+#def likelihood_gauss(xm, xobs, sigobs):
+#	return np.sum(-(np.array(xm)-np.array(xobs))**2/np.array(sigobs)**2)
+
 # Definition of the Gaussian likelihood
+# WARNING IF THIS IS NOT COMMENTED AND YOU DON'T KNOW WHY, PLEASE COMMENT AND USE THE FUNCTION ABOVE
+# THIS FUNCTION IGNORES THE xobs AND THEREFORE TEST A NO-MEASUREMENT CASE (PRIOR ONLY)
 def likelihood_gauss(xm, xobs, sigobs):
-	return np.sum(-(np.array(xm)-np.array(xobs))**2/np.array(sigobs)**2)
+	return np.sum(-(np.array(xm))**2)
+
 
 # Definition of a uniform prior in log space
 def prior_uniform(x, xmin, xmax):
@@ -290,7 +297,7 @@ def test_do_minimise():
 	Dnu_obs=np.repeat(coefs[0],len(a2_obs))
 	#
 	ftype='gauss' 
-	a1_obs=np.repeat(1200., len(a2_obs))
+	a1_obs=np.repeat(0., len(a2_obs))
 	labels = ["epsilon_nl0_out", "epsilon_nl1_out", "theta0_out", "delta_out"]
 	constants=el, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype
 	#variables    
@@ -322,9 +329,9 @@ def test_do_minimise():
 	##Computation time (min):  113.1071536342303
 	##
 	#variables_init_emcee=epsilon_nl0_out,epsilon_nl1_out,theta0_out,delta_out
-	niter=2000
+	niter=6000
 	nwalkers=10
-	burnin=1000
+	burnin=1500
 	ndim=len(variables_init_emcee)
 	t0=time.time()
 	sampler=do_emcee(constants, variables_init_emcee, nwalkers=nwalkers, niter=niter)
@@ -334,9 +341,23 @@ def test_do_minimise():
 	tau=[800]
 	print("Autocorrelation time (in steps):", tau)
 	if 2*np.mean(tau) < niter:
-		flat_samples = sampler.get_chain(discard=burnin, thin=4, flat=True)
+		flat_samples = sampler.get_chain(discard=burnin, thin=nwalkers, flat=True)
+		log_posterior = sampler.get_log_prob(discard=burnin, flat=True, thin=nwalkers)
+		log_prior = sampler.get_blobs(discard=burnin, flat=True, thin=nwalkers)
 	else:
 		flat_samples = sampler.get_chain(discard=0, thin=1, flat=True)
+		log_posterior = sampler.get_log_prob(discard=0, flat=True, thin=nwalkers)
+		log_prior= sampler.get_blobs(discard=0, flat=True, thin=nwalkers)
+	np.save('samples.npy', flat_samples)
+	np.save('logposterior.npy', log_posterior)
+	np.save('logprior.npy', log_prior)
+	#
+	# Saving the likelihood graph
+	fig, ax = plt.subplots()
+	ax.plot(log_posterior)
+	ax.set_xlim(0, len(log_posterior))
+	ax.set_xlabel("step number");
+	fig.savefig('likelihood.jpg')
 	#
 	# Evaluate uncertainties using the samples
 	errors=np.zeros((2,ndim))
@@ -363,7 +384,6 @@ def test_do_minimise():
 		ax.plot(samples[:, :, i], "k", alpha=0.3)
 		ax.set_xlim(0, len(samples))
 		ax.set_ylabel(labels[i])
-		ax.yaxis.set_label_coords(-0.1, 0.5)
 	#
 	axes[-1].set_xlabel("step number");
 	fig.savefig('params_samples.jpg')
