@@ -26,7 +26,7 @@ def likelihood_gauss(xm, xobs, sigobs):
 # Definition of a uniform prior in log space
 def prior_uniform(x, xmin, xmax):
 	if x > xmin and x < xmax:
-		p=1/(xmax-xmin)
+		p=-np.log(np.abs(xmax-xmin))
 	else:
 		p=-np.inf
 	return p
