@@ -127,7 +127,8 @@ def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 
 def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, sintheta0, delta):
 	# Reject out or range solutions for theta0
-	pena=prior_uniform(np.arcsin(sintheta0), -1, 1)
+	#pena=prior_uniform(sintheta0, -1, 1)
+	pena=prior_uniform(np.arcsin(sintheta0), 0, np.pi)
 	# Reject absurd negative solutions and large 'spots' that exceed a pi/4 stellar coverage
 	pena=pena+prior_uniform(delta, 0, np.pi/4)
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
@@ -327,9 +328,9 @@ def test_do_minimise():
 	#variables_init_emcee=[ 3.12720862e-04, -4.08410550e-03 , 2.13381881e+00 , 1.21726515e-01]
 	variables_init_emcee=variables_init
 	do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init_emcee, ftype, fileout='model_plot_minimise.jpg')
-	niter=20000
+	niter=5000
 	nwalkers=10
-	burnin=4000
+	burnin=1000
 	ndim=len(variables_init_emcee)
 	t0=time.time()
 	sampler=do_emcee(constants, variables_init_emcee, nwalkers=nwalkers, niter=niter)
