@@ -31,6 +31,15 @@ def prior_uniform(x, xmin, xmax):
 		p=-np.inf
 	return p
 
+def prior_jeffreys(x, xmin, xmax):
+	if (x < xmax and x>0):
+		prior=1./(x+xmin)
+		norm=np.log((xmax+xmin)/xmin)
+		p=log(prior/norm)
+	else:
+		p=-np.inf
+	return p
+
 # Read files that contain observed a2 coefficients
 def read_obsfiles(file):
 	f=open(file, 'r')
@@ -127,10 +136,11 @@ def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 
 def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, sintheta0, delta):
 	# Reject out or range solutions for theta0
-	#pena=prior_uniform(sintheta0, -1, 1)
-	pena=prior_uniform(np.arcsin(sintheta0), 0, np.pi)
+	pena=prior_uniform(sintheta0, 0, 1)
+	#pena=prior_uniform(np.arcsin(sintheta0), 0, np.pi)
 	# Reject absurd negative solutions and large 'spots' that exceed a pi/4 stellar coverage
-	pena=pena+prior_uniform(delta, 0, np.pi/4)
+	#pena=pena+prior_uniform(delta, 0, np.pi/4)
+	pena=pena+prior_jeffreys(delta, 0.01, np.pi/4)
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl
@@ -263,7 +273,7 @@ def do_minimise(constants, variables_init):
 
 def do_emcee(constants, variables_init, nwalkers=100, niter=5000):
 	l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype=constants
-	init_vars = variables_init + 1e-4 * np.random.randn(nwalkers, len(variables_init))
+	init_vars = variables_init + 1e-3 * np.random.randn(nwalkers, len(variables_init))
 	nwalkers, ndim = init_vars.shape
 	with Pool() as pool:
 		sampler = emcee.EnsembleSampler(
@@ -302,7 +312,8 @@ def test_do_minimise():
 	#constants
 	file='/Users/obenomar/tmp/test_a2AR/data/kplr008379927_kasoc-psd_slc_v2_1111/a2stats_n0.txt'
 	#file='/home/obenomar/data/kplr008379927_kasoc-psd_slc_v2_1111/a2stats_n0.txt'
-	file='/Users/obenomar/tmp/test_a2AR/data/Simulations/simu_smallerrors_epsicte_1.txt'
+	#file='/Users/obenomar/tmp/test_a2AR/data/Simulations/simu_smallerrors_epsicte_1.txt'
+	file='/Users/obenomar/Work/Github/acoefs_checks/data/Simulations/simu_smallerrors_epsicte_1.txt'
 	en, el, nu_nl_obs, a2_obs, sig_a2_obs=read_obsfiles(file)
 	nu_l0=[2324.5102  , 2443.2154 ,  2563.6517 ,  2684.0427  , 2804.5845 ,  2924.5659 , 3044.9774]
 	x=np.linspace(0,len(nu_l0)-1,  len(nu_l0))
@@ -311,7 +322,7 @@ def test_do_minimise():
 	#
 	ftype='gauss' 
 	a1_obs=np.repeat(0., len(a2_obs))
-	labels = ["epsilon_nl0", "epsilon_nl1", "sin(theta0", "delta"]
+	labels = ["epsilon_nl0", "epsilon_nl1", "sin(theta0)", "delta"]
 	#labels = ["epsilon_nl0", "epsilon_nl1", "sin(theta0)", "delta"]
 	constants=el, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype
 	#variables    
@@ -328,9 +339,9 @@ def test_do_minimise():
 	#variables_init_emcee=[ 3.12720862e-04, -4.08410550e-03 , 2.13381881e+00 , 1.21726515e-01]
 	variables_init_emcee=variables_init
 	do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init_emcee, ftype, fileout='model_plot_minimise.jpg')
-	niter=5000
+	niter=200000
 	nwalkers=10
-	burnin=1000
+	burnin=50000
 	ndim=len(variables_init_emcee)
 	t0=time.time()
 	sampler=do_emcee(constants, variables_init_emcee, nwalkers=nwalkers, niter=niter)
@@ -345,8 +356,8 @@ def test_do_minimise():
 		log_prior = sampler.get_blobs(discard=burnin, flat=True, thin=nwalkers)
 	else:
 		flat_samples = sampler.get_chain(discard=0, thin=1, flat=True)
-		log_posterior = sampler.get_log_prob(discard=0, flat=True, thin=nwalkers)
-		log_prior= sampler.get_blobs(discard=0, flat=True, thin=nwalkers)
+		log_posterior = sampler.get_log_prob(discard=0, flat=True)
+		log_prior= sampler.get_blobs(discard=0, flat=True)
 	np.save('samples.npy', flat_samples)
 	np.save('labels.npy', labels)
 	np.save('logposterior.npy', log_posterior)
