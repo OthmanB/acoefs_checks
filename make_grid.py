@@ -62,12 +62,12 @@ def make_Alm_grid(l=1, theta_min=0, theta_max=np.pi/2, delta_min=0, delta_max=np
 	resol_delta=delta[1]-delta[0]
 	return theta, delta, Alm, resol_theta, resol_delta
 
-def do_Alm_grid(outfile='grid_Alm.npz', l=1, resol=np.pi/20, ftype='gauss', flatarray=False):
+def do_Alm_grid(outfile='grid_Alm.npz', l=1, resol=np.pi/20, ftype='gauss', theta_min=0, theta_max=np.pi/2, delta_min=0, delta_max=np.pi/4, flatarray=False):
 
-	theta_min=0
-	theta_max=np.pi/2
-	delta_min=0
-	delta_max=np.pi/4
+	#theta_min=0
+	#theta_max=np.pi/2
+	#delta_min=0
+	#delta_max=np.pi/4
 
 	m=np.linspace(-l, l, 2*l+1)
 	print("             m      ")
@@ -77,7 +77,7 @@ def do_Alm_grid(outfile='grid_Alm.npz', l=1, resol=np.pi/20, ftype='gauss', flat
 		resol=resol, ftype=ftype, flatarray=flatarray)
 	np.savez(outfile, theta=theta, delta=delta, Alm=Alm, l=l, m=m, resol_theta=resol_theta, resol_delta=resol_delta)
 	grid=np.load(outfile)
-	show_Alm_grids(grid, l, filerootjpg='grid_Alm_', theta1=None, delta1=None)
+	show_Alm_grids(grid, l, filerootjpg=outfile + '_', theta1=None, delta1=None)
 	print('Grid Done')
 
 

@@ -159,11 +159,18 @@ def a2_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolato
 
 def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
 	# Reject out or range solutions for theta0
-	pena=prior_uniform(theta0, 0, np.pi/2)
-	#pena=prior_uniform(theta0, -1, 1) # IF THETA0 IS ACTUALLY SIN(THETA0) (JUSTIFIED BY THE SAMPLING OF THE PRIOR)
+	#pena=prior_uniform(theta0, 0, np.pi/2)
+	pena=prior_uniform(theta0, 0, 2*np.pi/3)
 	# Reject absurd negative solutions and large 'spots' that exceed a pi/4 stellar coverage
-	#pena=pena+prior_uniform(delta, 0, np.pi/4)
-	pena=pena+prior_jeffreys(delta, 0.02, np.pi/4)
+	pena=pena+prior_uniform(delta, 0, np.pi/4)
+
+	#if theta0 >= (np.pi/2 - delta/2):
+	#	dim=1
+	#	pena=pena-1.
+	#else:
+	#	dim=2
+
+	#pena=pena+prior_jeffreys(delta, 0.02, np.pi/4)
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl
@@ -226,8 +233,10 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 	f.close()
 
 def test_do_simfile():
-		fileout="/Users/obenomar/tmp/test_a2AR/data/Simulations/simu_smallerrors_epsicte_1.txt"
-		ftype='gauss'
+		#fileout="/Users/obenomar/tmp/test_a2AR/data/Simulations/simu_smallerrors_epsicte_1.txt"
+		fileout='/Users/obenomar/tmp/test_a2AR/data/Simulations/gate/simu_smallerrors_epsicte_1.txt'
+		#ftype='gauss'
+		ftype='gate'
 		Dnu=85
 		epsi0=0.25
 		N0=8
@@ -236,7 +245,7 @@ def test_do_simfile():
 		epsilon_nl=np.array([-1e-3, 0])
 		theta0=np.pi/2 - np.pi/6
 		delta=np.pi/8
-		relerr_a2=[0.05, 0.15] # 5nHz + 10% error
+		relerr_a2=[0.02, 0.1] # 5nHz + 10% error
 		do_simfile(fileout, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=relerr_a2, relerr_epsilon_nl=None)
 		en, el, nu_nl_obs, a2_obs, sig_a2_obs=read_obsfiles(fileout)
 		Dnu_obs=conditional_resize(Dnu, len(a2_obs))
@@ -282,6 +291,7 @@ def do_stats(variables,l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype)
 		print('      delta       = ', delta)
 		print('Imposing -infinity to the Posterior in order to reject the solution')
 		Posterior=-np.inf
+	#Posterior=P
 	Posterior=L+P
 	return Posterior
 
@@ -339,6 +349,7 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs
 		print('Imposing -infinity to the Posterior in order to reject the solution')
 		Posterior=-np.inf
 	Posterior=L+P
+	#Posterior=P
 	return Posterior
 
 def do_minimise(constants, variables_init):
@@ -463,7 +474,7 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 	np.savez(posterior_outfile, theta=Alm_grid_l1['theta'], delta=Alm_grid_l1['delta'], Posterior=Posterior, 
 		epsilon_nl0=epsilon_nl0, epsilon_nl1=epsilon_nl1, a1_obs=a1_obs, Dnu_obs=Dnu_obs, nu_nl_obs=nu_nl_obs, 
 		en=en, el=el, a2_obs=a2_obs, sig_a2_obs=sig_a2_obs, resol_theta=Alm_grid_l1['resol_theta'], resol_delta=Alm_grid_l1['resol_delta'])
-	plot_posterior_map(Alm_grid_l1['theta'], Alm_grid_l1['delta'], Posterior, posterior_outfile, truncate=None)
+	plot_posterior_map_2(Alm_grid_l1['theta'], Alm_grid_l1['delta'], Posterior, posterior_outfile, truncate=None)
 	#
 	print('Grid done')
 
