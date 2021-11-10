@@ -44,7 +44,9 @@ def prior_jeffreys(x, xmin, xmax):
 
 
 # Read files that contain observed a2 coefficients
-def read_obsfiles(file):
+def read_obsfiles(file, read_a4=False):
+	pos_a2_med=4
+	pos_a4_med=10
 	f=open(file, 'r')
 	txt=f.read()
 	f.close()
@@ -54,6 +56,8 @@ def read_obsfiles(file):
 	nu_nl=[]
 	a2=[]
 	sig_a2=[]
+	a4=[]
+	sig_a4=[]
 	skip=0
 	#print(txt)
 	#print('----')
@@ -71,11 +75,16 @@ def read_obsfiles(file):
 					en.append(1)
 				el.append(int(float(s[0])))
 				nu_nl.append(float(s[1]))
-				a2.append(float(s[4]))
-				em=float(s[4]) - float(s[3])
-				ep=float(s[5]) - float(s[4])
+				a2.append(float(s[pos_a2_med]))
+				em=float(s[pos_a2_med]) - float(s[pos_a2_med-1])
+				ep=float(s[pos_a2_med+1]) - float(s[pos_a2_med])
 				sig_a2.append(np.sqrt(em**2 + ep**2)/2)
-	return en, el, nu_nl, a2, sig_a2
+				if read_a4 == True:
+					a4.append(float(s[pos_a4_med]))
+					em=float(s[pos_a4_med]) - float(s[pos_a4_med-1])
+					ep=float(s[pos_a4_med+1]) - float(s[pos_a4_med])
+					sig_a4.append(np.sqrt(em**2 + ep**2)/2)
+	return en, el, nu_nl, a2, sig_a2, a4, sig_a4
 
 def Qlm(l,m):
     Qlm=(l*(l+1) - 3*m**2)/((2*l - 1)*(2*l + 3))
@@ -124,9 +133,9 @@ def a2_model(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 	acoefs=eval_acoefs(l, nu_nlm)
 	return acoefs[1] # returns only a2 
 
-# Compute the a2 coefficient for the theoretical model and provided key parameters of that model
+# Compute the a-coefficients for the theoretical model and provided key parameters of that model
 # Use Alm_cpp instead of Alm in python... much faster. Refer to test_convergence.py to see the accuracy
-def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
+def a_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 	nu_nlm=[]
 	el, em, Alm=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
 	for m in range(-l, l+1):	
@@ -135,9 +144,13 @@ def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 		nu_nlm.append(nu_nl + perturb_CF + perturb_AR)
 	#print(nu_nlm)
 	acoefs=eval_acoefs(l, nu_nlm)
-	return acoefs[1] # returns only a2 
+	return acoefs # returns all a-coeficients 
 
-def a2_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2):
+def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
+	acoefs=a_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l)
+	return acoefs[1] # returns only the a2 coefficient
+
+def a_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2):
 	nu_nlm=[]
 	for m in range(-l, l+1):	
 		if l==1:
@@ -155,6 +168,10 @@ def a2_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolato
 		nu_nlm.append(nu_nl + perturb_CF + perturb_AR)
 	#print(nu_nlm)
 	acoefs=eval_acoefs(l, nu_nlm)
+	return acoefs
+
+def a2_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2):
+	coefs=a_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2)
 	return acoefs[1]
 
 def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
@@ -177,7 +194,8 @@ def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
 		pena=pena+prior_uniform(epsilon_nl, -0.1, 0.001)
 	return pena
 
-def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=None, relerr_epsilon_nl=None):
+def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=None, relerr_epsilon_nl=None, 
+		do_a4=False, relerr_a4=None):
 	lmax=2
 	#		
 	l_list=[]
@@ -185,6 +203,9 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 	a2_list=[]
 	a2_true_list=[]
 	a2_err_list=[]
+	a4_list=[]
+	a4_true_list=[]
+	a4_err_list=[]
 	epsilon_nl_list=[]
 	epsilon_nl_true_list=[]
 	for l in range(1, lmax+1):
@@ -197,11 +218,21 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 			else:
 				e_nl=e_nl_true
 			#
-			a2_true=a2_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
+			if do_a4 == False:
+				a2_true=a2_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
+			else:
+				acoefs=a_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
+				a2_true=acoefs[1]
+				a4_true=acoefs[3]
 			if relerr_a2 != None:
 				a2=np.random.normal(a2_true, (relerr_a2[0] + relerr_a2[1]*np.abs(a2_true))/np.sqrt(Nmax-N0))
 			else:
 				a2=a2_true
+			if do_a4 == True:
+				if relerr_a4 != None and l != 1: # l=1 has a4=0 by definition
+					a4=np.random.normal(a4_true, (relerr_a4[0] + relerr_a4[1]*np.abs(a4_true))/np.sqrt(Nmax-N0))
+				else:
+					a4=a4_true
 			l_list.append(l)
 			nu_nl_list.append(nu_nl)
 			epsilon_nl_list.append(e_nl)
@@ -209,12 +240,18 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 			a2_err_list.append((relerr_a2[0] + relerr_a2[1]*a2_true)*1e3)
 			a2_list.append(a2*1e3)
 			a2_true_list.append(a2_true*1e3)
-			print(nu_nl, a2, a2_true, e_nl, e_nl_true)
+			if do_a4 == True:
+				a4_err_list.append((relerr_a4[0] + relerr_a4[1]*a2_true)*1e3)
+				a4_list.append(a4*1e3)
+				a4_true_list.append(a4_true*1e3)
+				print(nu_nl, a2, a2_true, a4, a4_true, e_nl, e_nl_true)
+			else:
+				print(nu_nl, a2, a2_true, e_nl, e_nl_true)
 	#
 	f=open(file, 'w')
 	f.write("# Table of SIMULATED a2 coefficient in function of nu(n,l)"+"\n")
-	f.write("# Created using fit_a2sig.py :: do_simfile()"+"\n")
-	f.write("# Dnu ="  + str(Dnu))
+	f.write("# Created using fit_a2sig.py :: do_simfile()"+" Version 9 Nov 2021\n")
+	f.write("# Dnu ="  + str(Dnu) +"\n")
 	f.write("# epsilon =" +str(epsi0)+"\n")
 	f.write("# N0 =" +str(N0)+"\n")
 	f.write("# Nmax =" + str(Nmax)+"\n")
@@ -224,19 +261,31 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 	f.write("# delta =" + str(delta)+"\n")
 	f.write("# ftype =" + str(ftype)+"\n")
 	f.write("# relerr_a2 =" + str(relerr_a2)+"\n")
+	f.write("# do_a4 =" + str(do_a4)+"\n")
+	f.write("# relerr_a4 =" + str(relerr_a4)+"\n")
 	f.write("# relerr_epsilon_nl =" + str(relerr_epsilon_nl) +"\n")
-	f.write("# Col(0):l, Col(1):nu, Col(2)-Col(7):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(8): a2_true, Col(9): epsilon_nl Col(10): epsilon_nl_true\n")
-	for i in range(len(nu_nl_list)):
-		f.write("{0:1d}   {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.8f}   {9:0.8f}".format(l_list[i], nu_nl_list[i], 
-			a2_list[i]-2*a2_err_list[i], a2_list[i]-a2_err_list[i], a2_list[i], a2_list[i]+a2_err_list[i], a2_list[i]+2*a2_err_list[i], 
-			a2_true_list[i], epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")
+	if do_a4 == False:
+		f.write("# Col(0):l, Col(1):nu, Col(2)-Col(6):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(7): a2_true, Col(8): epsilon_nl Col(9): epsilon_nl_true\n")
+		for i in range(len(nu_nl_list)):
+			f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.8f}   {9:0.8f}".format(l_list[i], nu_nl_list[i], 
+				a2_list[i]-2*a2_err_list[i], a2_list[i]-a2_err_list[i], a2_list[i], a2_list[i]+a2_err_list[i], a2_list[i]+2*a2_err_list[i], 
+				a2_true_list[i], epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")
+	else:
+		f.write("# Col(0):l, Col(1):nu, Col(2)-Col(6):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(7): a2_true,  Col(8-12): a4, Col(13): a4_true, Col(14): epsilon_nl Col(16): epsilon_nl_true\n")		
+		for i in range(len(nu_nl_list)):
+			f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}    {9:0.6f}    {10:0.6f}    {11:0.6f}    {12:0.6f}    {13:0.6f}    {14:0.8f}   {15:0.8f}".format(l_list[i], nu_nl_list[i], 
+				a2_list[i]-2*a2_err_list[i], a2_list[i]-a2_err_list[i], a2_list[i], a2_list[i]+a2_err_list[i], a2_list[i]+2*a2_err_list[i], 
+				a2_true_list[i], 
+				a4_list[i]-2*a4_err_list[i], a4_list[i]-a4_err_list[i], a4_list[i], a4_list[i]+a4_err_list[i], a4_list[i]+2*a4_err_list[i],
+				a4_true_list[i], 
+				epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")
 	f.close()
 
-def test_do_simfile():
-		#fileout="/Users/obenomar/tmp/test_a2AR/data/Simulations/simu_smallerrors_epsicte_1.txt"
-		fileout='/Users/obenomar/tmp/test_a2AR/data/Simulations/gate/simu_smallerrors_epsicte_1.txt'
-		#ftype='gauss'
-		ftype='gate'
+def test_do_simfile(err_type='medium', do_a4=False, ftype='gate', index=1):
+		if err_type != 'tiny' and err_type != 'small' and err_type != 'medium':
+			print("Error in test_do_simfile: Please use either tiny, small or medium for the err_type argument" )
+			exit()
+		dir_out='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/data/Simulations/' + ftype
 		Dnu=85
 		epsi0=0.25
 		N0=8
@@ -245,12 +294,34 @@ def test_do_simfile():
 		epsilon_nl=np.array([-1e-3, 0])
 		theta0=np.pi/2 - np.pi/6
 		delta=np.pi/8
-		relerr_a2=[0.02, 0.1] # 5nHz + 10% error
-		do_simfile(fileout, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=relerr_a2, relerr_epsilon_nl=None)
-		en, el, nu_nl_obs, a2_obs, sig_a2_obs=read_obsfiles(fileout)
+		if err_type == 'medium':
+			fileout=dir_out + '/simu_mediumerrors_epsicte_' + str(index) + '.txt'
+			relerr_a2=[0.02, 0.1] # 5nHz + 10% error
+			relerr_a4=None
+			if do_a4 == True:
+				relerr_a4=[0.02, 0.1]
+		if err_type == 'small':
+			fileout=dir_out + '/simu_smallerrors_epsicte_' + str(index) + '.txt'
+			relerr_a2=[0.005, 0.0] #
+			relerr_a4=None
+			if do_a4 == True:
+				relerr_a4=[0.005, 0.0]
+		if err_type == 'tiny':
+			fileout=dir_out + '/simu_tinyerrors_epsicte_' + str(index) + '.txt'
+			relerr_a2=[0.001, 0.0] #
+			relerr_a4=None
+			if do_a4 == True:
+				relerr_a4=[0.001, 0.0]
+		do_simfile(fileout, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=relerr_a2, relerr_epsilon_nl=None, do_a4=do_a4, relerr_a4=relerr_a4)
+		en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs=read_obsfiles(fileout, read_a4=do_a4)
+		#print(a4_obs, sig_a4_obs)
+		#print('---')
+		#exit()
 		Dnu_obs=conditional_resize(Dnu, len(a2_obs))
 		a1_obs=conditional_resize(a1, len(a2_obs))
-		do_model_plot(el, nu_nl_obs, Dnu, a1_obs, a2_obs, sig_a2_obs, None, ftype, fileout=fileout + '.jpg')
+		do_a2_model_plot(el, nu_nl_obs, Dnu, a1_obs, a2_obs, sig_a2_obs, None, ftype, fileout=fileout + '_a2.jpg') # The None is [epsi_nl0, epsi_nl1, theta0, delta] 
+		if do_a4 == True:
+			do_model_plot(el, nu_nl_obs, Dnu, a1_obs, a4_obs, sig_a4_obs, None, None, ftype, fileout=fileout, aj=4) # The two none are theta0, delta0
 
 # The main function that will compute the statistical criteria for the maximisation procedure
 #def do_stats(constants, variables):
@@ -295,7 +366,7 @@ def do_stats(variables,l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype)
 	Posterior=L+P
 	return Posterior
 
-def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, interpolator_l1, interpolator_l2):
+def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, nu_nl_obs, Dnu_obs, interpolator_l1, interpolator_l2, do_a4=False):
 	epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	#
 	# Compute the priors
@@ -322,10 +393,14 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs
 	#
 	epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	a2_nl_mod=[]
+	a4_nl_mod=[]
 	# Given the variables of the model, get a2 of the model a2_mod at the observed frequencies nu_nl_obs of each l and m modes
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl the 1e-3 is here for avoiding round off errors	
-		a2_mod=a2_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2)
+		#a2_mod=a2_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2)
+		acoefs=a_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2)
+		a2_nl_mod.append(float(acoefs[1])*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
+		a4_nl_mod.append(float(acoefs[3])*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
 		#print("Dnu_obs:", Dnu_obs)
 		#print("a1_obs :", a1_obs)
 		#print("epsilon_nl : ", epsilon_nl)
@@ -334,18 +409,23 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs
 		#print("l          :", l)
 		#print("a2_mod:", a2_mod)
 		#exit()
-		a2_nl_mod.append(float(a2_mod)*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
 	# Compare the observed and theoretical a2 using the least square method
-	L=likelihood_gauss(a2_nl_mod, a2_obs, sig_a2_obs)
+	L_a2=likelihood_gauss(a2_nl_mod, a2_obs, sig_a2_obs)
+	L_a4=0
+	if do_a4 == True:
+		L_a4=likelihood_gauss(a4_nl_mod, a4_obs, sig_a4_obs)
+	L=L_a2+L_a4
 	## Add priors
 	#P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta)
 	if np.isnan(L):
-		print("---- GOT A NaN on L ---")
+		print("---- GOT A NaN on L = L_a2 + L_a4 ---")
 		print("L = ", L, "     P = ", P)
 		print("      epsilon_nl0 = ", epsilon_nl0)
 		print("      epsilon_nl1 = ", epsilon_nl1)
 		print("      theta0      = ", theta0)
 		print('      delta       = ', delta)
+		print('             L_a2 = ', L_a2)
+		print('             L_a4 = ', L_a4)
 		print('Imposing -infinity to the Posterior in order to reject the solution')
 		Posterior=-np.inf
 	Posterior=L+P
@@ -386,7 +466,7 @@ def get_errors(hessian):
 			errors[k] = np.sqrt(hess[k,k])
 	return errors
 
-def do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med_params, ftype, fileout='model_plot.jpg'):
+def do_a2_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med_params, ftype, fileout='model_plot.jpg'):
 	#med_params[2]=np.arcsin(med_params[2])
 		# The plot of the fit with some randomly chosen fits to represent the variance
 	fig, ax = plt.subplots()
@@ -402,6 +482,22 @@ def do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med_params
 	ax.errorbar(nu_nl_obs, a2_obs, yerr=sig_a2_obs, fmt=".k", capsize=0)
 	fig.savefig(fileout)
 
+def do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, aj_obs, sig_aj_obs, theta0, delta0, ftype, fileout='model_plot', aj=2):
+	fig, ax = plt.subplots()
+	aj_nl_mod_best_cpp=[]
+	try:
+		for i in range(len(nu_nl_obs)):
+			epsilon_nl=med_params[0] + med_params[1]*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl the 1e-3 is here to avoid round off errors on the params
+			acoefs=a_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta0, ftype, el[i])
+			aj_nl_mod_best_cpp.append(float(acoefs[j-1])*1e3)
+		ax.plot(nu_nl_obs, aj_nl_mod_best_cpp, "ro")#, '--', color='blue')
+	except:
+		print("Warning: No parameters provided. The plot will only show the data")
+	#print("aj_obs :", aj_obs )
+	#print("sig_aj_obs :", sig_aj_obs )
+	ax.errorbar(nu_nl_obs, aj_obs, yerr=sig_aj_obs, fmt=".k", capsize=0)
+	fig.savefig(fileout + '_a'+str(aj)+ '.jpg')
+
 def conditional_resize(x, req_length):
 	try:
 		length=len(x)
@@ -413,14 +509,16 @@ def conditional_resize(x, req_length):
 		y=np.repeat(x,req_length)
 	return y
 
-def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz'):
+def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False):
 	# One grid for each l in principle. It is up to the user to make sure to have them in the increasing l order: l=1, 2, 3
 	Alm_grid_l1=np.load(Almgridfiles[0])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
 	Alm_grid_l2=np.load(Almgridfiles[1])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
 	Ndelta=len(Alm_grid_l1['delta'])
 	Ntheta=len(Alm_grid_l1['theta'])
 	#
-	en, el, nu_nl_obs, a2_obs, sig_a2_obs=read_obsfiles(obsfile)
+	a4_obs=[]
+	sig_a4_obs=[]
+	en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs=read_obsfiles(obsfile, read_a4=do_a4)
 	Dnu_obs=conditional_resize(Dnu_obs, len(a2_obs))
 	a1_obs=conditional_resize(a1_obs, len(a2_obs))
 	#labels = ["epsilon_nl0", "epsilon_nl1", "theta0", "delta"]
@@ -466,14 +564,15 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 		print('           index : [ 1 ,', Ndelta, ']')
 		for delta0 in Alm_grid_l1['delta']:
 			variables=epsilon_nl0, epsilon_nl1, theta0, delta0
-			P=do_stats_ongrid(variables, el, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, funcs_l1, funcs_l2)
+			P=do_stats_ongrid(variables, el, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, nu_nl_obs, Dnu_obs, funcs_l1, funcs_l2, do_a4=do_a4)
 			#print("Posterior: ", P)
 			Posterior[i,j]=P
 			j=j+1
 		i=i+1
 	np.savez(posterior_outfile, theta=Alm_grid_l1['theta'], delta=Alm_grid_l1['delta'], Posterior=Posterior, 
 		epsilon_nl0=epsilon_nl0, epsilon_nl1=epsilon_nl1, a1_obs=a1_obs, Dnu_obs=Dnu_obs, nu_nl_obs=nu_nl_obs, 
-		en=en, el=el, a2_obs=a2_obs, sig_a2_obs=sig_a2_obs, resol_theta=Alm_grid_l1['resol_theta'], resol_delta=Alm_grid_l1['resol_delta'])
+		en=en, el=el, a2_obs=a2_obs, sig_a2_obs=sig_a2_obs, a4_obs=a4_obs, sig_a4_obs=sig_a4_obs,
+		resol_theta=Alm_grid_l1['resol_theta'], resol_delta=Alm_grid_l1['resol_delta'])
 	plot_posterior_map_2(Alm_grid_l1['theta'], Alm_grid_l1['delta'], Posterior, posterior_outfile, truncate=None)
 	#
 	print('Grid done')
@@ -571,14 +670,14 @@ def test_do_minimise():
 	theta0_init=np.pi/2
 	delta_init=np.pi/8
 	variables_init=epsilon_nl0_init, epsilon_nl1_init, theta0_init, delta_init
-	do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init, ftype, fileout='model_plot_init.jpg')
+	do_a2_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init, ftype, fileout='model_plot_init.jpg')
 	#sols=do_minimise(constants, variables_init)
 	#t1=time.time()
 	#print(sols.x)
 	#variables_init_emcee=sols.x
 	#variables_init_emcee=[ 3.12720862e-04, -4.08410550e-03 , 2.13381881e+00 , 1.21726515e-01]
 	variables_init_emcee=variables_init
-	do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init_emcee, ftype, fileout='model_plot_minimise.jpg')
+	do_a2_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init_emcee, ftype, fileout='model_plot_minimise.jpg')
 	niter=20000
 	nwalkers=10
 	burnin=10000
@@ -641,7 +740,7 @@ def test_do_minimise():
 	fig = corner.corner(flat_samples, labels=labels, truths=None);
 	#
 	fig.savefig('params_pdfs.jpg')
-	do_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med, ftype, fileout='model_plot_emcee.jpg')
+	do_a2_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med, ftype, fileout='model_plot_emcee.jpg')
 #test_do_minimise()
 #print("End")
 
