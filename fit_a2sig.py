@@ -445,7 +445,25 @@ def do_stats(variables,l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype)
 	Posterior=L+P
 	return Posterior
 
-def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs,nu_nl_obs, Dnu_obs, interpolator_l1, interpolator_l2, interpolator_l3, do_a4=False, do_a6=False):
+def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs,nu_nl_obs, Dnu_obs, 
+		interpolator_l1, interpolator_l2, interpolator_l3, do_a4=False, do_a6=False, fit_acoefs=-1):
+	# Main function that handle creating a Posterior using observables for a_j , j=[2,4,6] and grids for Alm(theta,delta)
+	# saved in the interpolator functions for l1, l2, l3.
+	# fit_acoefs: Controls whether we compare directly the a2 coefficients or if we compare a linear fit 
+	# 		(which was shown to be extremely accurate for describing Alm). 
+	# 		If set to -1 (default), the full set of a coefficients is used for comparing individual aj coefficients (no fit)
+	# 		If set to 0: It will fit the acoefficients with a l dependence (one fit per each l and per aj). 
+	# 		If set to 1: It will fit the acoefficients without l dependence (one fit per each aj)
+	#		If set to 2: It will compute use the mean of aj (fit with a constant) to compute the posterior
+	a1_obs=np.asarray(a1_obs)
+	a2_obs=np.asarray(a2_obs)
+	Dnu_obs=np.asarray(Dnu_obs)
+	sig_a2_obs=np.asarray(sig_a2_obs)
+	a4_obs=np.asarray(a4_obs)
+	sig_a4_obs=np.asarray(sig_a4_obs)
+	a6_obs=np.asarray(a6_obs)
+	sig_a6_obs=np.asarray(sig_a6_obs)
+	#
 	epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	#
 	# Compute the priors
@@ -474,6 +492,15 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 	a2_nl_mod=[]
 	a4_nl_mod=[]
 	a6_nl_mod=[]	
+	a2_mod_data=[]
+	a4_mod_data=[]
+	a6_mod_data=[]
+	a2_obs_data=[]
+	a4_obs_data=[]
+	a6_obs_data=[]
+	a2_sig_obs_data=[]
+	a4_sig_obs_data=[]
+	a6_sig_obs_data=[]
 	# Given the variables of the model, get a2 of the model a2_mod at the observed frequencies nu_nl_obs of each l and m modes
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl the 1e-3 is here for avoiding round off errors	
@@ -481,28 +508,90 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 		a2_nl_mod.append(float(acoefs[1])*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
 		a4_nl_mod.append(float(acoefs[3])*1e3) #  convert a4 in nHz, because we assume here that nu_nl is in microHz
 		a6_nl_mod.append(float(acoefs[5])*1e3) #  convert a6 in nHz, because we assume here that nu_nl is in microHz
-	#print("Dnu_obs:", Dnu_obs)
-	#print("a1_obs :", a1_obs)
-	#print("epsilon_nl : ", epsilon_nl)
-	#print("theta0     :", theta0)
-	#print("delta      :", delta)
-	#print("l          :", l)
-	#print("a2_mod:", a2_nl_mod)
-	#print("a4_mod:", a4_nl_mod)
-	#print("a6_mod:", a6_nl_mod)
-	#print(" -------- ")
-	#exit()
-	# Compare the observed and theoretical a2 using the least square method
-	L_a2=likelihood_gauss(a2_nl_mod, a2_obs, sig_a2_obs)
-	L_a4=0
-	L_a6=0
-	if do_a4 == True:
-		L_a4=likelihood_gauss(a4_nl_mod, a4_obs, sig_a4_obs)
-	if do_a6 == True:
-		L_a6=likelihood_gauss(a6_nl_mod, a6_obs, sig_a6_obs)
+	#
+	if fit_acoefs == -1: # Default: All of the data we use for the posterior are the raw a-coefficients and their errors
+		a2_mod_data=a2_nl_mod
+		a2_obs_data=a2_obs
+		a2_sig_obs_data=sig_a2_obs
+		a4_mod_data=a4_nl_mod
+		a4_obs_data=a4_obs
+		a4_sig_obs_data=sig_a4_obs
+		a6_mod_data=a6_nl_mod
+		a6_obs_data=a6_obs
+		a6_sig_obs_data=sig_a6_obs
+	if fit_acoefs == 0: # Here, all of the data we use for the posterior are the results of a 1st order polynomial fit to get a polynomial description of aj(nu,l)
+		L_a2=0
+		L_a4=0
+		L_a6=0
+		for el in range(1, np.max(l)+1):
+			posl=np.where(np.asarray(l) == el)
+			a2_obs_data, cov_a2=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a2_obs,posl).flatten(), 1, w=1/np.take(sig_a2_obs,posl).flatten()**2, cov=True)
+			a2_sig_obs_data=np.sqrt(np.diag(cov_a2))
+			a2_mod_data=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a2_nl_mod,posl).flatten(), 1)
+			L_a2=L_a2 + likelihood_gauss(a2_mod_data, a2_obs_data, a2_sig_obs_data)
+			if	do_a4 == True and el >= 2:
+				a4_obs_data, cov_a4=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a4_obs,posl).flatten(), 1, w=1/np.take(sig_a4_obs,posl).flatten()**2, cov=True)
+				#a4_obs_data, cov_a4=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a4_obs,posl).flatten(), 1, cov=True)
+				a4_sig_obs_data=np.sqrt(np.diag(cov_a4))
+				a4_mod_data=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a4_nl_mod,posl).flatten(), 1)
+				L_a4=L_a4 + likelihood_gauss(a4_mod_data, a4_obs_data, a4_sig_obs_data)
+			if	do_a6 == True and el >= 3:
+				a6_obs_data, cov_a6=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a6_obs,posl).flatten(), 1, w=1/np.take(sig_a6_obs,posl).flatten()**2, cov=True)
+				#a6_obs_data, cov_a6=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a6_obs,posl).flatten(), 1, cov=True)
+				a6_sig_obs_data=np.sqrt(np.diag(cov_a6))
+				a6_mod_data=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a6_nl_mod,posl).flatten(), 1)
+				L_a6=L_a6 + likelihood_gauss(a6_mod_data, a6_obs_data, a6_sig_obs_data)
+			#print(" el = ", el)
+			#print("a2_obs_data = ", a2_obs_data)
+			#print("a4_obs_data = ", a4_obs_data)
+			#print("a6_obs_data = ", a6_obs_data)
+			#print("a2_sig_obs_data = ", a2_sig_obs_data)
+			#print("a4_sig_obs_data = ", a4_sig_obs_data)
+			#print("a6_sig_obs_data = ", a6_sig_obs_data)
+			#print("a2_mod_data = ", a2_mod_data)
+			#print("a4_mod_data = ", a4_mod_data)
+			#print("a6_mod_data = ", a6_mod_data)
+			#print("L_a2 =  ", L_a2)
+			#print("L_a4 =  ", L_a4)
+			#print("L_a6 =  ", L_a6)
+			#print("-------")
+	if fit_acoefs == 1: # Here, all of the data we use for the posterior are the results of a 1st order polynomial fit to get a polynomial description of <aj(nu)>_l
+		a2_obs_data, cov_a2=np.polyfit(nu_nl_obs, a2_obs, 1, w=1/sig_a2_obs**2, cov=True)
+		a2_sig_obs_data=np.sqrt(np.diag(cov_a2))
+		a2_mod_data=np.polyfit(nu_nl_obs, a2_nl_mod, 1)
+		if	do_a4 == True:
+			a4_obs_data, cov_a4=np.polyfit(nu_nl_obs, a4_obs, 1, w=1/sig_a4_obs**2, cov=True)
+			a4_sig_obs_data=np.sqrt(np.diag(cov_a4))
+			a4_mod_data=np.polyfit(nu_nl_obs, a4_nl_mod, 1)
+		if do_a6 == True:
+			a6_obs_data, cov_a6=np.polyfit(nu_nl_obs, a6_obs, 1, w=1/sig_a6_obs**2, cov=True)
+			a6_sig_obs_data=np.sqrt(np.diag(cov_a6))
+			a6_mod_data=np.polyfit(nu_nl_obs, a6_nl_mod, 1)
+	if fit_acoefs == 2: # Here, all of the data we use for the posterior are the results of the mean of <aj>_ln = cte
+		a2_obs_data=np.mean(a2_obs)
+		a2_sig_obs_data=np.sqrt(np.sum(sig_a2_obs**2)/len(sig_a2_obs))
+		a2_mod_data=np.mean(a2_nl_mod)
+		if do_a4 == True:
+			a4_obs_data=np.mean(a4_obs)
+			a4_sig_obs_data=np.sqrt(np.sum(sig_a4_obs**2)/len(sig_a4_obs))
+			a4_mod_data=np.mean(a4_nl_mod)
+		if do_a6 == True:
+			a6_obs_data=np.mean(a6_obs)
+			a6_sig_obs_data=np.sqrt(np.sum(sig_a6_obs**2)/len(sig_a6_obs))
+			a6_mod_data=np.mean(a6_nl_mod)
+	#
+	if fit_acoefs != 0: # Likelihood computation for scenarii -1, 1, 2
+		# Compare the observed and theoretical a2 using the least square method
+		L_a2=likelihood_gauss(a2_mod_data, a2_obs_data, a2_sig_obs_data)
+		L_a4=0
+		L_a6=0
+		if do_a4 == True:
+			L_a4=likelihood_gauss(a4_mod_data, a4_obs_data, a4_sig_obs_data)
+		if do_a6 == True:
+			L_a6=likelihood_gauss(a6_mod_data, a6_obs_data, a6_sig_obs_data)
+	# Compute the total likelihood at the end
 	L=L_a2+L_a4+L_a6
-	## Add priors
-	#P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta)
+	#
 	if np.isnan(L):
 		print("---- GOT A NaN on L = L_a2 + L_a4 + L_a6---")
 		print("L = ", L, "     P = ", P)
@@ -517,7 +606,6 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 		Posterior=-np.inf
 	Posterior=L+P
 	#Posterior=P
-	#exit()
 	return Posterior
 
 def do_minimise(constants, variables_init):
@@ -597,11 +685,48 @@ def conditional_resize(x, req_length):
 		y=np.repeat(x,req_length)
 	return y
 
-def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False, do_a6=False):
+def do_posterior_map_preset():
+	#
+	dir_core='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/'
+	#
+	# To change only if you change the observables:
+	obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_2.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
+	Dnu_obs=85 # As per set in the simulations
+	a1_obs=0   # As per set in the simulations
+	epsilon_nl0=-0.001 # As per set in the simulations
+	epsilon_nl1=0
+	#
+	# To change only if you change the grids of Alm:
+	dir_grids=dir_core+"/grids/gate/800pts/"
+	dir_posteriors=dir_core + 'grids_posterior/gate/effects_of_acoefs_modeling/'
+	Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
+	#
+	# To change in function of the tested scenario:
+	# --- Best case Scenario With 1st order polynoms--- # 
+	#do_a4=True # We use a4
+	#do_a6=True # We use a6
+	#fit_acoefs=0 # We fit full polynomial on nu and l
+	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+
+	# --- removing a6 case Scenario With 1st order polynoms--- # 
+	#do_a4=True # We use a4
+	#do_a6=False # We DO NOT use a6
+	#fit_acoefs=0 # We fit full polynomial on nu and l
+	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+
+	# --- removing a6 case Scenario With 1st order polynoms--- # 
+	do_a4=False # We use a4
+	do_a6=False # We DO NOT use a6
+	fit_acoefs=0 # We fit full polynomial on nu and l
+	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+
+def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False, do_a6=False, fit_acoefs=-1):
 	# One grid for each l in principle. It is up to the user to make sure to have them in the increasing l order: l=1, 2, 3
 	Alm_grid_l1=np.load(Almgridfiles[0])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
 	Alm_grid_l2=np.load(Almgridfiles[1])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
-	if do_a6 == True:
+	if do_a6 == True or len(Almgridfiles) == 3: # We still initialise the l=3 grid if the file is provided by the user
 		if len(Almgridfiles) >= 3:
 			Alm_grid_l3=np.load(Almgridfiles[2])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
 		else:
@@ -635,7 +760,7 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 		funcs_l2.append(interpolate.interp2d(Alm_grid_l2['theta'], Alm_grid_l2['delta'], Alm_flat, kind='cubic'))
 	funcs_l3=[]
 	l=3
-	if do_a6 == True:
+	if do_a6 == True or len(Almgridfiles) == 3:
 		for m in range(-l,l+1):
 			Alm_flat=[]
 			for j in range(Ndelta):
@@ -663,7 +788,7 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 		print('           index : [ 1 ,', Ndelta, ']')
 		for delta0 in Alm_grid_l1['delta']:
 			variables=epsilon_nl0, epsilon_nl1, theta0, delta0
-			P=do_stats_ongrid(variables, el, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs, nu_nl_obs, Dnu_obs, funcs_l1, funcs_l2, funcs_l3, do_a4=do_a4, do_a6=do_a6)
+			P=do_stats_ongrid(variables, el, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs, nu_nl_obs, Dnu_obs, funcs_l1, funcs_l2, funcs_l3, do_a4=do_a4, do_a6=do_a6,fit_acoefs=fit_acoefs)
 			#print("Posterior: ", P)
 			Posterior[i,j]=P
 			j=j+1
@@ -671,7 +796,7 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 	np.savez(posterior_outfile, theta=Alm_grid_l1['theta'], delta=Alm_grid_l1['delta'], Posterior=Posterior, 
 		epsilon_nl0=epsilon_nl0, epsilon_nl1=epsilon_nl1, a1_obs=a1_obs, Dnu_obs=Dnu_obs, nu_nl_obs=nu_nl_obs, 
 		en=en, el=el, a2_obs=a2_obs, sig_a2_obs=sig_a2_obs, a4_obs=a4_obs, sig_a4_obs=sig_a4_obs, a6_obs=a6_obs, sig_a6_obs=sig_a6_obs,
-		resol_theta=Alm_grid_l1['resol_theta'], resol_delta=Alm_grid_l1['resol_delta'])
+		do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs, resol_theta=Alm_grid_l1['resol_theta'], resol_delta=Alm_grid_l1['resol_delta'])
 	plot_posterior_map_2(Alm_grid_l1['theta'], Alm_grid_l1['delta'], Posterior, posterior_outfile, truncate=None)
 	#
 	print('Grid done')
