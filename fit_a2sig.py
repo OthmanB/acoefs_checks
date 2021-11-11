@@ -44,9 +44,10 @@ def prior_jeffreys(x, xmin, xmax):
 
 
 # Read files that contain observed a2 coefficients
-def read_obsfiles(file, read_a4=False):
+def read_obsfiles(file, read_a4=False, read_a6=False):
 	pos_a2_med=4
 	pos_a4_med=10
+	pos_a6_med=16
 	f=open(file, 'r')
 	txt=f.read()
 	f.close()
@@ -58,6 +59,8 @@ def read_obsfiles(file, read_a4=False):
 	sig_a2=[]
 	a4=[]
 	sig_a4=[]
+	a6=[]
+	sig_a6=[]
 	skip=0
 	#print(txt)
 	#print('----')
@@ -84,7 +87,12 @@ def read_obsfiles(file, read_a4=False):
 					em=float(s[pos_a4_med]) - float(s[pos_a4_med-1])
 					ep=float(s[pos_a4_med+1]) - float(s[pos_a4_med])
 					sig_a4.append(np.sqrt(em**2 + ep**2)/2)
-	return en, el, nu_nl, a2, sig_a2, a4, sig_a4
+				if read_a6 == True:
+					a6.append(float(s[pos_a6_med]))
+					em=float(s[pos_a6_med]) - float(s[pos_a6_med-1])
+					ep=float(s[pos_a6_med+1]) - float(s[pos_a6_med])
+					sig_a6.append(np.sqrt(em**2 + ep**2)/2)
+	return en, el, nu_nl, a2, sig_a2, a4, sig_a4, a6, sig_a6
 
 def Qlm(l,m):
     Qlm=(l*(l+1) - 3*m**2)/((2*l - 1)*(2*l + 3))
@@ -150,15 +158,17 @@ def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 	acoefs=a_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l)
 	return acoefs[1] # returns only the a2 coefficient
 
-def a_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2):
+def a_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2, interpolator_l3):
 	nu_nlm=[]
 	for m in range(-l, l+1):	
 		if l==1:
 			Alm=interpolator_l1[l+m](theta0, delta0)
 		if l==2:
 			Alm=interpolator_l2[l+m](theta0, delta0)
-		if l>=3:
-			print("l>=3 is not implemented yet in a2_model_interpol")
+		if l==3:
+			Alm=interpolator_l3[l+m](theta0, delta0)
+		if l>=4:
+			print("l>=4 is not implemented yet in a2_model_interpol")
 			exit()
 		if l<1:
 			print("l<1 is not authorized in a2_model_interpol")
@@ -194,9 +204,8 @@ def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
 		pena=pena+prior_uniform(epsilon_nl, -0.1, 0.001)
 	return pena
 
-def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=None, relerr_epsilon_nl=None, 
-		do_a4=False, relerr_a4=None):
-	lmax=2
+def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, do_a4=False, do_a6=False,
+		relerr_a2=None, relerr_a4=None, relerr_a6=None, relerr_epsilon_nl=None, lmax=2):
 	#		
 	l_list=[]
 	nu_nl_list=[]
@@ -206,6 +215,9 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 	a4_list=[]
 	a4_true_list=[]
 	a4_err_list=[]
+	a6_list=[]
+	a6_true_list=[]
+	a6_err_list=[]
 	epsilon_nl_list=[]
 	epsilon_nl_true_list=[]
 	for l in range(1, lmax+1):
@@ -218,21 +230,24 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 			else:
 				e_nl=e_nl_true
 			#
-			if do_a4 == False:
-				a2_true=a2_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
-			else:
-				acoefs=a_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
-				a2_true=acoefs[1]
-				a4_true=acoefs[3]
+			acoefs=a_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
+			a2_true=acoefs[1]
 			if relerr_a2 != None:
 				a2=np.random.normal(a2_true, (relerr_a2[0] + relerr_a2[1]*np.abs(a2_true))/np.sqrt(Nmax-N0))
 			else:
 				a2=a2_true
 			if do_a4 == True:
+				a4_true=acoefs[3]
 				if relerr_a4 != None and l != 1: # l=1 has a4=0 by definition
 					a4=np.random.normal(a4_true, (relerr_a4[0] + relerr_a4[1]*np.abs(a4_true))/np.sqrt(Nmax-N0))
 				else:
 					a4=a4_true
+			if do_a6 == True:
+				a6_true=acoefs[5]	
+				if relerr_a6 != None and l != 1 and l !=2: # l=1 have a4=0, a6=0 and l=2 have a6=0 by definition
+					a6=np.random.normal(a6_true, (relerr_a6[0] + relerr_a6[1]*np.abs(a6_true))/np.sqrt(Nmax-N0))
+				else:
+					a6=a6_true
 			l_list.append(l)
 			nu_nl_list.append(nu_nl)
 			epsilon_nl_list.append(e_nl)
@@ -240,13 +255,46 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 			a2_err_list.append((relerr_a2[0] + relerr_a2[1]*a2_true)*1e3)
 			a2_list.append(a2*1e3)
 			a2_true_list.append(a2_true*1e3)
-			if do_a4 == True:
-				a4_err_list.append((relerr_a4[0] + relerr_a4[1]*a2_true)*1e3)
-				a4_list.append(a4*1e3)
-				a4_true_list.append(a4_true*1e3)
-				print(nu_nl, a2, a2_true, a4, a4_true, e_nl, e_nl_true)
-			else:
-				print(nu_nl, a2, a2_true, e_nl, e_nl_true)
+			if do_a4 == False and do_a6 == False:
+				print(l, nu_nl, a2, a2_true, e_nl, e_nl_true)
+			if do_a4 == True and do_a6 == False:
+				if l>=2:
+					a4_err_list.append((relerr_a4[0] + relerr_a4[1]*a4_true)*1e3)
+					a4_list.append(a4*1e3)
+					a4_true_list.append(a4_true*1e3)
+				else:
+					a4_err_list.append(1) # Error must be set to something non-zero with the current do_stats_ongrid routine. 
+					a4_list.append(0)
+					a4_true_list.append(0)					
+				print(l, nu_nl, a2, a2_true, a4, a4_true, e_nl, e_nl_true)
+			if do_a4 == False and do_a6 == True:
+				if l>=3:
+					a6_err_list.append((relerr_a6[0] + relerr_a6[1]*a6_true)*1e3)
+					a6_list.append(a6*1e3)
+					a6_true_list.append(a6_true*1e3)
+				else:
+					a6_err_list.append(1) # Error must be set to something non-zero with the current do_stats_ongrid routine.
+					a6_list.append(0)
+					a6_true_list.append(0)					
+				print(l, nu_nl, a2, a2_true, a6, a6_true, e_nl, e_nl_true)
+			if do_a4 == True and do_a6 == True:
+				if l>=2:
+					a4_err_list.append((relerr_a4[0] + relerr_a4[1]*a4_true)*1e3)
+					a4_list.append(a4*1e3)
+					a4_true_list.append(a4_true*1e3)
+				else:
+					a4_err_list.append(1) # Error must be set to something non-zero with the current do_stats_ongrid routine.
+					a4_list.append(0)
+					a4_true_list.append(0)					
+				if l>=3:
+					a6_err_list.append((relerr_a6[0] + relerr_a6[1]*a6_true)*1e3)
+					a6_list.append(a6*1e3)
+					a6_true_list.append(a6_true*1e3)
+				else:
+					a6_err_list.append(1) # Error must be set to something non-zero with the current do_stats_ongrid routine.
+					a6_list.append(0)
+					a6_true_list.append(0)					
+				print(l, nu_nl, a2, a2_true, a4, a4_true, a6, a6_true, e_nl, e_nl_true)
 	#
 	f=open(file, 'w')
 	f.write("# Table of SIMULATED a2 coefficient in function of nu(n,l)"+"\n")
@@ -263,14 +311,16 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 	f.write("# relerr_a2 =" + str(relerr_a2)+"\n")
 	f.write("# do_a4 =" + str(do_a4)+"\n")
 	f.write("# relerr_a4 =" + str(relerr_a4)+"\n")
+	f.write("# do_a6 =" + str(do_a6)+"\n")
+	f.write("# relerr_a6 =" + str(relerr_a6)+"\n")
 	f.write("# relerr_epsilon_nl =" + str(relerr_epsilon_nl) +"\n")
-	if do_a4 == False:
+	if do_a4 == False and do_a6 == False:
 		f.write("# Col(0):l, Col(1):nu, Col(2)-Col(6):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(7): a2_true, Col(8): epsilon_nl Col(9): epsilon_nl_true\n")
 		for i in range(len(nu_nl_list)):
 			f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.8f}   {9:0.8f}".format(l_list[i], nu_nl_list[i], 
 				a2_list[i]-2*a2_err_list[i], a2_list[i]-a2_err_list[i], a2_list[i], a2_list[i]+a2_err_list[i], a2_list[i]+2*a2_err_list[i], 
 				a2_true_list[i], epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")
-	else:
+	if do_a4 == True and do_a6 == False:
 		f.write("# Col(0):l, Col(1):nu, Col(2)-Col(6):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(7): a2_true,  Col(8-12): a4, Col(13): a4_true, Col(14): epsilon_nl Col(16): epsilon_nl_true\n")		
 		for i in range(len(nu_nl_list)):
 			f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}    {9:0.6f}    {10:0.6f}    {11:0.6f}    {12:0.6f}    {13:0.6f}    {14:0.8f}   {15:0.8f}".format(l_list[i], nu_nl_list[i], 
@@ -279,9 +329,29 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 				a4_list[i]-2*a4_err_list[i], a4_list[i]-a4_err_list[i], a4_list[i], a4_list[i]+a4_err_list[i], a4_list[i]+2*a4_err_list[i],
 				a4_true_list[i], 
 				epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")
+	if do_a4 == False and do_a6 == True:
+		f.write("# Col(0):l, Col(1):nu, Col(2)-Col(6):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(7): a2_true,  Col(8-12): a6, Col(13): a6_true, Col(14): epsilon_nl Col(16): epsilon_nl_true\n")		
+		for i in range(len(nu_nl_list)):
+			f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}    {9:0.6f}    {10:0.6f}    {11:0.6f}    {12:0.6f}    {13:0.6f}    {14:0.8f}   {15:0.8f}".format(l_list[i], nu_nl_list[i], 
+				a2_list[i]-2*a2_err_list[i], a2_list[i]-a2_err_list[i], a2_list[i], a2_list[i]+a2_err_list[i], a2_list[i]+2*a2_err_list[i], 
+				a2_true_list[i], 
+				a6_list[i]-2*a6_err_list[i], a6_list[i]-a6_err_list[i], a6_list[i], a6_list[i]+a6_err_list[i], a6_list[i]+2*a6_err_list[i],
+				a6_true_list[i], 
+				epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")
+	if do_a4 == True and do_a6 == True:
+		f.write("# Col(0):l, Col(1):nu, Col(2)-Col(6):a2 (for P(a2)=[2.25,16,50,84,97.75]), Col(7): a2_true,  Col(8-12): a4, Col(13): a4_true, Col(13-17): a6, Col(18): a6_true, Col(19): epsilon_nl Col(20): epsilon_nl_true\n")		
+		for i in range(len(nu_nl_list)):
+			f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}    {9:0.6f}    {10:0.6f}    {11:0.6f}    {12:0.6f}    {13:0.6f}     {14:0.6f}    {15:0.6f}    {16:0.6f}    {17:0.6f}    {18:0.6f}    {19:0.8f}   {20:0.8f}    {21:0.8f}".format(l_list[i], nu_nl_list[i], 
+				a2_list[i]-2*a2_err_list[i], a2_list[i]-a2_err_list[i], a2_list[i], a2_list[i]+a2_err_list[i], a2_list[i]+2*a2_err_list[i], 
+				a2_true_list[i], 
+				a4_list[i]-2*a4_err_list[i], a4_list[i]-a4_err_list[i], a4_list[i], a4_list[i]+a4_err_list[i], a4_list[i]+2*a4_err_list[i],
+				a4_true_list[i], 
+				a6_list[i]-2*a6_err_list[i], a6_list[i]-a6_err_list[i], a6_list[i], a6_list[i]+a6_err_list[i], a6_list[i]+2*a6_err_list[i],
+				a6_true_list[i], 
+				epsilon_nl_list[i], epsilon_nl_true_list[i])+"\n")	
 	f.close()
 
-def test_do_simfile(err_type='medium', do_a4=False, ftype='gate', index=1):
+def test_do_simfile(err_type='medium', do_a4=False, do_a6=False, ftype='gate', index=1, lmax=2):
 		if err_type != 'tiny' and err_type != 'small' and err_type != 'medium':
 			print("Error in test_do_simfile: Please use either tiny, small or medium for the err_type argument" )
 			exit()
@@ -300,21 +370,28 @@ def test_do_simfile(err_type='medium', do_a4=False, ftype='gate', index=1):
 			relerr_a4=None
 			if do_a4 == True:
 				relerr_a4=[0.02, 0.1]
+			if do_a6 == True:
+				relerr_a4=[0.02, 0.1]
 		if err_type == 'small':
 			fileout=dir_out + '/simu_smallerrors_epsicte_' + str(index) + '.txt'
 			relerr_a2=[0.005, 0.0] #
 			relerr_a4=None
 			if do_a4 == True:
 				relerr_a4=[0.005, 0.0]
+			if do_a6 == True:
+				relerr_a6=[0.005, 0.0]
 		if err_type == 'tiny':
 			fileout=dir_out + '/simu_tinyerrors_epsicte_' + str(index) + '.txt'
 			relerr_a2=[0.001, 0.0] #
 			relerr_a4=None
 			if do_a4 == True:
 				relerr_a4=[0.001, 0.0]
-		do_simfile(fileout, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, relerr_a2=relerr_a2, relerr_epsilon_nl=None, do_a4=do_a4, relerr_a4=relerr_a4)
-		en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs=read_obsfiles(fileout, read_a4=do_a4)
-		#print(a4_obs, sig_a4_obs)
+			if do_a6 == True:
+				relerr_a6=[0.0005, 0.0]
+		do_simfile(fileout, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, do_a4=do_a4, do_a6=do_a6, 
+			relerr_a2=relerr_a2, relerr_a4=relerr_a4, relerr_a6=relerr_a6, relerr_epsilon_nl=None, lmax=lmax)
+		en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs=read_obsfiles(fileout, read_a4=do_a4, read_a6=do_a6)
+		#print(a6_obs, sig_a6_obs)
 		#print('---')
 		#exit()
 		Dnu_obs=conditional_resize(Dnu, len(a2_obs))
@@ -322,6 +399,8 @@ def test_do_simfile(err_type='medium', do_a4=False, ftype='gate', index=1):
 		do_a2_model_plot(el, nu_nl_obs, Dnu, a1_obs, a2_obs, sig_a2_obs, None, ftype, fileout=fileout + '_a2.jpg') # The None is [epsi_nl0, epsi_nl1, theta0, delta] 
 		if do_a4 == True:
 			do_model_plot(el, nu_nl_obs, Dnu, a1_obs, a4_obs, sig_a4_obs, None, None, ftype, fileout=fileout, aj=4) # The two none are theta0, delta0
+		if do_a6 == True:
+			do_model_plot(el, nu_nl_obs, Dnu, a1_obs, a6_obs, sig_a6_obs, None, None, ftype, fileout=fileout, aj=6) # The two none are theta0, delta0
 
 # The main function that will compute the statistical criteria for the maximisation procedure
 #def do_stats(constants, variables):
@@ -366,7 +445,7 @@ def do_stats(variables,l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype)
 	Posterior=L+P
 	return Posterior
 
-def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, nu_nl_obs, Dnu_obs, interpolator_l1, interpolator_l2, do_a4=False):
+def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs,nu_nl_obs, Dnu_obs, interpolator_l1, interpolator_l2, interpolator_l3, do_a4=False, do_a6=False):
 	epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	#
 	# Compute the priors
@@ -394,31 +473,38 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 	epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	a2_nl_mod=[]
 	a4_nl_mod=[]
+	a6_nl_mod=[]	
 	# Given the variables of the model, get a2 of the model a2_mod at the observed frequencies nu_nl_obs of each l and m modes
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl the 1e-3 is here for avoiding round off errors	
-		#a2_mod=a2_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2)
-		acoefs=a_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2)
+		acoefs=a_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2, interpolator_l3)
 		a2_nl_mod.append(float(acoefs[1])*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
-		a4_nl_mod.append(float(acoefs[3])*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
-		#print("Dnu_obs:", Dnu_obs)
-		#print("a1_obs :", a1_obs)
-		#print("epsilon_nl : ", epsilon_nl)
-		#print("theta0     :", theta0)
-		#print("delta      :", delta)
-		#print("l          :", l)
-		#print("a2_mod:", a2_mod)
-		#exit()
+		a4_nl_mod.append(float(acoefs[3])*1e3) #  convert a4 in nHz, because we assume here that nu_nl is in microHz
+		a6_nl_mod.append(float(acoefs[5])*1e3) #  convert a6 in nHz, because we assume here that nu_nl is in microHz
+	#print("Dnu_obs:", Dnu_obs)
+	#print("a1_obs :", a1_obs)
+	#print("epsilon_nl : ", epsilon_nl)
+	#print("theta0     :", theta0)
+	#print("delta      :", delta)
+	#print("l          :", l)
+	#print("a2_mod:", a2_nl_mod)
+	#print("a4_mod:", a4_nl_mod)
+	#print("a6_mod:", a6_nl_mod)
+	#print(" -------- ")
+	#exit()
 	# Compare the observed and theoretical a2 using the least square method
 	L_a2=likelihood_gauss(a2_nl_mod, a2_obs, sig_a2_obs)
 	L_a4=0
+	L_a6=0
 	if do_a4 == True:
 		L_a4=likelihood_gauss(a4_nl_mod, a4_obs, sig_a4_obs)
-	L=L_a2+L_a4
+	if do_a6 == True:
+		L_a6=likelihood_gauss(a6_nl_mod, a6_obs, sig_a6_obs)
+	L=L_a2+L_a4+L_a6
 	## Add priors
 	#P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta)
 	if np.isnan(L):
-		print("---- GOT A NaN on L = L_a2 + L_a4 ---")
+		print("---- GOT A NaN on L = L_a2 + L_a4 + L_a6---")
 		print("L = ", L, "     P = ", P)
 		print("      epsilon_nl0 = ", epsilon_nl0)
 		print("      epsilon_nl1 = ", epsilon_nl1)
@@ -426,10 +512,12 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 		print('      delta       = ', delta)
 		print('             L_a2 = ', L_a2)
 		print('             L_a4 = ', L_a4)
+		print('             L_a6 = ', L_a6)	
 		print('Imposing -infinity to the Posterior in order to reject the solution')
 		Posterior=-np.inf
 	Posterior=L+P
 	#Posterior=P
+	#exit()
 	return Posterior
 
 def do_minimise(constants, variables_init):
@@ -509,16 +597,23 @@ def conditional_resize(x, req_length):
 		y=np.repeat(x,req_length)
 	return y
 
-def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False):
+def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False, do_a6=False):
 	# One grid for each l in principle. It is up to the user to make sure to have them in the increasing l order: l=1, 2, 3
 	Alm_grid_l1=np.load(Almgridfiles[0])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
 	Alm_grid_l2=np.load(Almgridfiles[1])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
+	if do_a6 == True:
+		if len(Almgridfiles) >= 3:
+			Alm_grid_l3=np.load(Almgridfiles[2])# Note: ftype = 'gauss' or 'gate' depends on the Alm grid file. No need to specify it
+		else:
+			print("Error in do_posterior_map() : do_a6 = True but Almgridfiles has a size <3 and is therefore missing the grid file for l=3")
+			print("The program will exit now")
+			exit()
 	Ndelta=len(Alm_grid_l1['delta'])
 	Ntheta=len(Alm_grid_l1['theta'])
 	#
 	a4_obs=[]
 	sig_a4_obs=[]
-	en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs=read_obsfiles(obsfile, read_a4=do_a4)
+	en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs=read_obsfiles(obsfile, read_a4=do_a4, read_a6=do_a6)
 	Dnu_obs=conditional_resize(Dnu_obs, len(a2_obs))
 	a1_obs=conditional_resize(a1_obs, len(a2_obs))
 	#labels = ["epsilon_nl0", "epsilon_nl1", "theta0", "delta"]
@@ -538,6 +633,14 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 		for j in range(Ndelta):
 			Alm_flat.append(Alm_grid_l2['Alm'][l+m,:,j])
 		funcs_l2.append(interpolate.interp2d(Alm_grid_l2['theta'], Alm_grid_l2['delta'], Alm_flat, kind='cubic'))
+	funcs_l3=[]
+	l=3
+	if do_a6 == True:
+		for m in range(-l,l+1):
+			Alm_flat=[]
+			for j in range(Ndelta):
+				Alm_flat.append(Alm_grid_l3['Alm'][l+m,:,j])
+			funcs_l3.append(interpolate.interp2d(Alm_grid_l3['theta'], Alm_grid_l3['delta'], Alm_flat, kind='cubic'))
 	#
 	# Compute the statistics on the grid of Alm
 	tot=0 # Linear flat inded for {Ntheta x Ndelta} space
@@ -552,10 +655,6 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 	print('Delta range: ', '[', np.min(Alm_grid_l1['delta']), np.max(Alm_grid_l1['delta']), ']')
 	print("Ndelta =", Ndelta)
 	print("Ntheta =", Ntheta)
-	#print("len(Alm_grid_l1['theta']) =", len(Alm_grid_l1['theta']))
-	#print("len(Alm_grid_l2['theta']) =", len(Alm_grid_l2['theta']))
-	#print("len(Alm_grid_l1['delta']) =", len(Alm_grid_l1['delta']))
-	#print("len(Alm_grid_l2['delta']) =", len(Alm_grid_l2['delta']))
 	print("np.shape(Posterior) =", np.shape(Posterior))
 	#exit()
 	for theta0 in Alm_grid_l1['theta']:
@@ -564,14 +663,14 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 		print('           index : [ 1 ,', Ndelta, ']')
 		for delta0 in Alm_grid_l1['delta']:
 			variables=epsilon_nl0, epsilon_nl1, theta0, delta0
-			P=do_stats_ongrid(variables, el, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, nu_nl_obs, Dnu_obs, funcs_l1, funcs_l2, do_a4=do_a4)
+			P=do_stats_ongrid(variables, el, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs, nu_nl_obs, Dnu_obs, funcs_l1, funcs_l2, funcs_l3, do_a4=do_a4, do_a6=do_a6)
 			#print("Posterior: ", P)
 			Posterior[i,j]=P
 			j=j+1
 		i=i+1
 	np.savez(posterior_outfile, theta=Alm_grid_l1['theta'], delta=Alm_grid_l1['delta'], Posterior=Posterior, 
 		epsilon_nl0=epsilon_nl0, epsilon_nl1=epsilon_nl1, a1_obs=a1_obs, Dnu_obs=Dnu_obs, nu_nl_obs=nu_nl_obs, 
-		en=en, el=el, a2_obs=a2_obs, sig_a2_obs=sig_a2_obs, a4_obs=a4_obs, sig_a4_obs=sig_a4_obs,
+		en=en, el=el, a2_obs=a2_obs, sig_a2_obs=sig_a2_obs, a4_obs=a4_obs, sig_a4_obs=sig_a4_obs, a6_obs=a6_obs, sig_a6_obs=sig_a6_obs,
 		resol_theta=Alm_grid_l1['resol_theta'], resol_delta=Alm_grid_l1['resol_delta'])
 	plot_posterior_map_2(Alm_grid_l1['theta'], Alm_grid_l1['delta'], Posterior, posterior_outfile, truncate=None)
 	#
