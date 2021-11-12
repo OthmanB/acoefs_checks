@@ -560,25 +560,29 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 		a2_sig_obs_data=np.sqrt(np.diag(cov_a2))
 		a2_mod_data=np.polyfit(nu_nl_obs, a2_nl_mod, 1)
 		if	do_a4 == True:
-			a4_obs_data, cov_a4=np.polyfit(nu_nl_obs, a4_obs, 1, w=1/sig_a4_obs**2, cov=True)
+			posl=np.where(np.asarray(l) >= 2) # a4 makes sense only for l>=2, we need to filter out the values to select only l>=2 before the fit
+			a4_obs_data, cov_a4=np.polyfit(np.take(nu_nl_obs,posl).flatten(), np.take(a4_obs, posl).flatten(), 1, w=1/np.take(sig_a4_obs, posl).flatten()**2, cov=True)
 			a4_sig_obs_data=np.sqrt(np.diag(cov_a4))
-			a4_mod_data=np.polyfit(nu_nl_obs, a4_nl_mod, 1)
+			a4_mod_data=np.polyfit(np.take(nu_nl_obs, posl).flatten(), np.take(a4_nl_mod, posl).flatten(), 1)
 		if do_a6 == True:
-			a6_obs_data, cov_a6=np.polyfit(nu_nl_obs, a6_obs, 1, w=1/sig_a6_obs**2, cov=True)
+			posl=np.where(np.asarray(l) >= 3) # a6 makes sense only for l>=3, we need to filter out the values to select only l>=3 before the fit
+			a6_obs_data, cov_a6=np.polyfit(np.take(nu_nl_obs, posl).flatten(), np.take(a6_obs, posl).flatten(), 1, w=1/np.take(sig_a6_obs, posl).flatten()**2, cov=True)
 			a6_sig_obs_data=np.sqrt(np.diag(cov_a6))
-			a6_mod_data=np.polyfit(nu_nl_obs, a6_nl_mod, 1)
+			a6_mod_data=np.polyfit(np.take(nu_nl_obs, posl).flatten(), np.take(a6_nl_mod, posl).flatten(), 1)
 	if fit_acoefs == 2: # Here, all of the data we use for the posterior are the results of the mean of <aj>_ln = cte
 		a2_obs_data=np.mean(a2_obs)
 		a2_sig_obs_data=np.sqrt(np.sum(sig_a2_obs**2)/len(sig_a2_obs))
 		a2_mod_data=np.mean(a2_nl_mod)
 		if do_a4 == True:
-			a4_obs_data=np.mean(a4_obs)
-			a4_sig_obs_data=np.sqrt(np.sum(sig_a4_obs**2)/len(sig_a4_obs))
-			a4_mod_data=np.mean(a4_nl_mod)
+			posl=np.where(np.asarray(l) >= 2) # a4 makes sense only for l>=2, we need to filter out the values to select only l>=2 before the fit
+			a4_obs_data=np.mean(np.take(a4_obs, posl).flatten())
+			a4_sig_obs_data=np.sqrt(np.sum(np.take(sig_a4_obs, posl).flatten()**2)/len(np.take(sig_a4_obs, posl).flatten()))
+			a4_mod_data=np.mean(np.take(a4_nl_mod, posl).flatten())
 		if do_a6 == True:
-			a6_obs_data=np.mean(a6_obs)
-			a6_sig_obs_data=np.sqrt(np.sum(sig_a6_obs**2)/len(sig_a6_obs))
-			a6_mod_data=np.mean(a6_nl_mod)
+			posl=np.where(np.asarray(l) >= 3) # a4 makes sense only for l>=3, we need to filter out the values to select only l>=3 before the fit
+			a6_obs_data=np.mean(np.take(a6_obs, posl).flatten())
+			a6_sig_obs_data=np.sqrt(np.sum(np.take(sig_a6_obs, posl).flatten()**2)/len(np.take(sig_a6_obs, posl).flatten()))
+			a6_mod_data=np.mean(np.take(a6_nl_mod, posl).flatten())
 	#
 	if fit_acoefs != 0: # Likelihood computation for scenarii -1, 1, 2
 		# Compare the observed and theoretical a2 using the least square method
@@ -702,6 +706,10 @@ def do_posterior_map_preset():
 	Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
 	#
 	# To change in function of the tested scenario:
+	
+	# ----------------- fit with polynomial accounting for nu and l ------------------------
+	# --------- This should be equivalent to fitting directly individual a-coefficients ----
+	# --------------------------------------------------------------------------------------
 	# --- Best case Scenario With 1st order polynoms--- # 
 	#do_a4=True # We use a4
 	#do_a6=True # We use a6
@@ -715,10 +723,54 @@ def do_posterior_map_preset():
 	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
+	#do_a4=False # We use a4
+	#do_a6=False # We DO NOT use a6
+	#fit_acoefs=0 # We fit full polynomial on nu and l
+	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+	#
+	# ----------------- fit with polynomial with nu dependence only (l depedence dropped) ------------------
+	# --------------- This is to test whether we can still constrain the activity that way  ----------------
+	# ------------- It is also similar to the initial fit I made with MCMC that show trends ----------------
+	# ------------------------------------------------------------------------------------------------------
+	# --- Best case Scenario With 1st order polynoms--- # 
+	#do_a4=True # We use a4
+	#do_a6=True # We use a6
+	#fit_acoefs=1 # We fit polynomial on nu only
+	#posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+
+	# --- removing a6 case Scenario With 1st order polynoms--- # 
+	#do_a4=True # We use a4
+	#do_a6=False # We DO NOT use a6
+	#fit_acoefs=1 # We fit polynomial on nu
+	#posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+
+	# --- removing a6 case Scenario With 1st order polynoms--- # 
+	#do_a4=False # We use a4
+	#do_a6=False # We DO NOT use a6
+	#fit_acoefs=1 # We fit polynomial on nu
+	#posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+
+	# ----------------- fit with polynomial with nu dependence only (l depedence dropped) ------------------
+	# --------------- This is to test whether we can still constrain the activity that way  ----------------
+	# ------------- It is also similar to the initial fit I made with MCMC that show trends ----------------
+	# ------------------------------------------------------------------------------------------------------
+	# --- Best case Scenario With 1st order polynoms--- # 
+	#do_a4=True # We use a4
+	#do_a6=True # We use a6
+	#fit_acoefs=2 # Use of the mean only
+	#posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+
+	# --- removing a6 case Scenario With 1st order polynoms--- # 
+	#do_a4=True # We use a4
+	#do_a6=False # We DO NOT use a6
+	#fit_acoefs=2 # We fit polynomial on nu
+	#posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+
+	# --- removing a6 case Scenario With 1st order polynoms--- # 
 	do_a4=False # We use a4
 	do_a6=False # We DO NOT use a6
-	fit_acoefs=0 # We fit full polynomial on nu and l
-	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+	fit_acoefs=2 # Use of the mean only
+	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
 
 	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
