@@ -362,8 +362,16 @@ def test_do_simfile(err_type='medium', do_a4=False, do_a6=False, ftype='gate', i
 		Nmax=14
 		a1=0
 		epsilon_nl=np.array([-1e-3, 0])
-		theta0=np.pi/2 - np.pi/6
+		# --- case of simu_tinyerrors_epsicte_2.txt ---
+		#theta0=np.pi/2 - np.pi/6
+		#delta=np.pi/8
+		# --- case of simu_tinyerrors_epsicte_3.txt ---
+		#theta0=np.pi/2  # Equatorial zone of activity
+		#delta=np.pi/8
+		# --- case of simu_tinyerrors_epsicte_3.txt ---
+		theta0=0  # Polar zone of activity
 		delta=np.pi/8
+		
 		if err_type == 'medium':
 			fileout=dir_out + '/simu_mediumerrors_epsicte_' + str(index) + '.txt'
 			relerr_a2=[0.02, 0.1] # 5nHz + 10% error
@@ -385,9 +393,9 @@ def test_do_simfile(err_type='medium', do_a4=False, do_a6=False, ftype='gate', i
 			relerr_a2=[0.001, 0.0] #
 			relerr_a4=None
 			if do_a4 == True:
-				relerr_a4=[0.001, 0.0]
+				relerr_a4=[0.0005, 0.0]
 			if do_a6 == True:
-				relerr_a6=[0.0005, 0.0]
+				relerr_a6=[0.00025, 0.0]
 		do_simfile(fileout, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, do_a4=do_a4, do_a6=do_a6, 
 			relerr_a2=relerr_a2, relerr_a4=relerr_a4, relerr_a6=relerr_a6, relerr_epsilon_nl=None, lmax=lmax)
 		en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs=read_obsfiles(fileout, read_a4=do_a4, read_a6=do_a6)
@@ -694,7 +702,16 @@ def do_posterior_map_preset():
 	dir_core='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/'
 	#
 	# To change only if you change the observables:
-	obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_2.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
+	# ------- Case of intermediate activity zone: theta0=60 deg, delta=22 deg -------
+	#obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_2.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
+	#dir_posteriors=dir_core + 'grids_posterior/gate/theta0_1.04_delta0_0.39/effects_of_acoefs_modeling/'
+	# ------- Case of Equatorial activity zone: theta0=90 deg, delta=22 deg -------
+	#obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_3.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
+	#dir_posteriors=dir_core + 'grids_posterior/gate/theta0_1.57_delta0_0.39/effects_of_acoefs_modeling/'
+	# ------- Case of Polar activity zone: theta0=0 deg, delta=22 deg -------
+	obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_4.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
+	dir_posteriors=dir_core + 'grids_posterior/gate/theta0_0.00_delta0_0.39/effects_of_acoefs_modeling/'
+	#
 	Dnu_obs=85 # As per set in the simulations
 	a1_obs=0   # As per set in the simulations
 	epsilon_nl0=-0.001 # As per set in the simulations
@@ -702,7 +719,6 @@ def do_posterior_map_preset():
 	#
 	# To change only if you change the grids of Alm:
 	dir_grids=dir_core+"/grids/gate/800pts/"
-	dir_posteriors=dir_core + 'grids_posterior/gate/effects_of_acoefs_modeling/'
 	Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
 	#
 	# To change in function of the tested scenario:
@@ -711,67 +727,73 @@ def do_posterior_map_preset():
 	# --------- This should be equivalent to fitting directly individual a-coefficients ----
 	# --------------------------------------------------------------------------------------
 	# --- Best case Scenario With 1st order polynoms--- # 
-	#do_a4=True # We use a4
-	#do_a6=True # We use a6
-	#fit_acoefs=0 # We fit full polynomial on nu and l
-	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+	do_a4=True # We use a4
+	do_a6=True # We use a6
+	fit_acoefs=0 # We fit full polynomial on nu and l
+	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	#do_a4=True # We use a4
-	#do_a6=False # We DO NOT use a6
-	#fit_acoefs=0 # We fit full polynomial on nu and l
-	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+	do_a4=True # We use a4
+	do_a6=False # We DO NOT use a6
+	fit_acoefs=0 # We fit full polynomial on nu and l
+	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	#do_a4=False # We use a4
-	#do_a6=False # We DO NOT use a6
-	#fit_acoefs=0 # We fit full polynomial on nu and l
-	#posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+	do_a4=False # We use a4
+	do_a6=False # We DO NOT use a6
+	fit_acoefs=0 # We fit full polynomial on nu and l
+	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 	#
 	# ----------------- fit with polynomial with nu dependence only (l depedence dropped) ------------------
 	# --------------- This is to test whether we can still constrain the activity that way  ----------------
 	# ------------- It is also similar to the initial fit I made with MCMC that show trends ----------------
 	# ------------------------------------------------------------------------------------------------------
 	# --- Best case Scenario With 1st order polynoms--- # 
-	#do_a4=True # We use a4
-	#do_a6=True # We use a6
-	#fit_acoefs=1 # We fit polynomial on nu only
-	#posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+	do_a4=True # We use a4
+	do_a6=True # We use a6
+	fit_acoefs=1 # We fit polynomial on nu only
+	posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	#do_a4=True # We use a4
-	#do_a6=False # We DO NOT use a6
-	#fit_acoefs=1 # We fit polynomial on nu
-	#posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+	do_a4=True # We use a4
+	do_a6=False # We DO NOT use a6
+	fit_acoefs=1 # We fit polynomial on nu
+	posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	#do_a4=False # We use a4
-	#do_a6=False # We DO NOT use a6
-	#fit_acoefs=1 # We fit polynomial on nu
-	#posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+	do_a4=False # We use a4
+	do_a6=False # We DO NOT use a6
+	fit_acoefs=1 # We fit polynomial on nu
+	posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# ----------------- fit with polynomial with nu dependence only (l depedence dropped) ------------------
+	# -------------- fit with polynomial with mean values only (nu and l depedence dropped) ----------------
 	# --------------- This is to test whether we can still constrain the activity that way  ----------------
-	# ------------- It is also similar to the initial fit I made with MCMC that show trends ----------------
 	# ------------------------------------------------------------------------------------------------------
 	# --- Best case Scenario With 1st order polynoms--- # 
-	#do_a4=True # We use a4
-	#do_a6=True # We use a6
-	#fit_acoefs=2 # Use of the mean only
-	#posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+	do_a4=True # We use a4
+	do_a6=True # We use a6
+	fit_acoefs=2 # Use of the mean only
+	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	#do_a4=True # We use a4
-	#do_a6=False # We DO NOT use a6
-	#fit_acoefs=2 # We fit polynomial on nu
-	#posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+	do_a4=True # We use a4
+	do_a6=False # We DO NOT use a6
+	fit_acoefs=2 # We fit polynomial on nu
+	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
+	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 	# --- removing a6 case Scenario With 1st order polynoms--- # 
 	do_a4=False # We use a4
 	do_a6=False # We DO NOT use a6
 	fit_acoefs=2 # Use of the mean only
 	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
-
 	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
 def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False, do_a6=False, fit_acoefs=-1):
