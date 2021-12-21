@@ -13,14 +13,14 @@ import corner
 
 
 ## Definition of the Gaussian likelihood
-#def likelihood_gauss(xm, xobs, sigobs):
-#	return np.sum(-(np.array(xm)-np.array(xobs))**2/np.array(sigobs)**2)
+def likelihood_gauss(xm, xobs, sigobs):
+	return np.sum(-(np.array(xm)-np.array(xobs))**2/np.array(sigobs)**2)
 
 # Definition of the Gaussian likelihood
 # WARNING IF THIS IS NOT COMMENTED AND YOU DON'T KNOW WHY, PLEASE COMMENT AND USE THE FUNCTION ABOVE
 # THIS FUNCTION IGNORES THE xobs AND THEREFORE TEST A NO-MEASUREMENT CASE (PRIOR ONLY)
-def likelihood_gauss(xm, xobs, sigobs):
-	return np.sum(-(np.array(xm))**2)
+#def likelihood_gauss(xm, xobs, sigobs):
+#	return np.sum(-(np.array(xm))**2)
 
 
 # Definition of a uniform prior in log space
