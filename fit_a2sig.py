@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import os
 import corner
-import make_grid as mkgrid
+#import make_Alm_grid as mkgrid
 from scipy import interpolate
 
 ## Definition of the Gaussian likelihood
@@ -66,7 +66,7 @@ def read_obsfiles(file, read_a4=False, read_a6=False, real_data=False):
 	skip=0
 	#print(txt)
 	#print('----')
-	if real_data == True:
+	if real_data == False:
 		for t in txt:
 			s=t.split()
 			if s != '' and s !=[]:
@@ -97,6 +97,12 @@ def read_obsfiles(file, read_a4=False, read_a6=False, real_data=False):
 						sig_a6.append(np.sqrt(em**2 + ep**2)/2)
 		return en, el, nu_nl, a2, sig_a2, a4, sig_a4, a6, sig_a6
 	else:
+		a1=[]
+		sig_a1=[]
+		a3=[]
+		sig_a3=[]
+		a5=[]
+		sig_a5=[]
 		for t in txt:
 			done=False
 			s=t.split()
@@ -110,10 +116,10 @@ def read_obsfiles(file, read_a4=False, read_a6=False, real_data=False):
 					else:
 						en.append(1)
 					if s[0] == '!' and s[1] == 'l':
-						el=s[2:]
+						el=np.asarray(s[3:], dtype=int)
 						done=True
 					if s[0] == '!' and s[1] == 'nu_nl_obs':
-						nu_nl=s[2:]
+						nu_nl=np.asarray(s[3:], dtype=float)
 						done=True
 					if done !=True:
 						a1.append(float(s[0]))
@@ -128,7 +134,10 @@ def read_obsfiles(file, read_a4=False, read_a6=False, real_data=False):
 						sig_a4.append(float(s[9]))
 						sig_a5.append(float(s[10]))
 						sig_a6.append(float(s[11]))
-		return en, el, nu_nl, a2, sig_a2, a3, sig_a3, a4, sig_a4, a5, sig_a5, a6, sig_a6
+		#print(a1,  a2, a3, a4, a5, a6)
+		#print(sig_a1, sig_a2, sig_a3, sig_a4, sig_a5, sig_a6)
+		#exit()
+		return en, el, nu_nl, a1, a2, a3, a4, a5, a6, sig_a1, sig_a2, sig_a3, sig_a4, sig_a5, sig_a6
 
 def Qlm(l,m):
 	Dnl=2./3
@@ -197,6 +206,70 @@ def a_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 	acoefs=eval_acoefs(l, nu_nlm)
 	return acoefs # returns all a-coeficients 
 
+# Compute a-coefficients in the case of  a zone description: high latitude ([0,theta1], mid latitudes ([theta1, theta2], low latitudes ([theta2, pi/2])))
+# where the weight (or probability) for each region is also a free parameter [w0, w1,w2] 
+def a_model_cpp_3zones(nu_nl, Dnu, a1, epsilon_nl, theta1, theta2, w0, w1,w2, l):
+	nu_nlm=[]
+	ftype='gate'
+	err=1e-6
+	if ((w0+w1+w2) >= (1 - err)) and ((w0+w1+w2) <= (1+err)): # We allow only an error of 1e-6 for the sum
+		# zone of high latitudes: [0,theta1]
+		theta0=theta1/2
+		delta=theta1
+		el0, em0, I0=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
+		# zone of mid latitudes: [theta1,theta2]
+		theta0=(theta1+theta2)/2
+		delta=theta2-theta1
+		el1, em1, I1=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
+		# zone of high latitudes: [theta2,pi/2]
+		theta0=theta2/2 + np.pi/4
+		delta=np.pi/2 - theta2
+		el2, em2, I2=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
+		theta_min=theta0-delta/2;
+		theta_max=theta0+delta/2;
+		#
+		# Just for debug: Check that the result is the symetric along the equatorial plan (pi/2)
+		#
+		# South pole, zone of high latitudes: [np.pi,np.pi-theta1]
+		theta0=np.pi - (np.pi-theta1)/2
+		delta=np.pi - theta1
+		el0prime, em0prime, I0prime=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
+		# South pole, zone of mid latitudes: [np.pi-theta1, np.pi-theta1-theta2]
+		theta0=np.pi - (theta2 + theta1)/2
+		delta=theta2-theta1
+		el1prime, em1prime, I1prime=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
+		# South pole, zone of low latitudes: [np.pi-theta1-theta2, np.pi/2]
+		theta0=np.pi - (theta2 + np.pi/2)/2
+		delta=theta2-np.pi/2
+		el2prime, em2prime, I2prime=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
+		for m in range(-l, l+1):	
+			perturb_CF=nu_CF(nu_nl, Dnu, a1, l, m)
+			perturb_AR=2*nu_nl*epsilon_nl*(w0*I0[m+l]+w1*I1[m+l]+w2*I2[m+l])
+			perturb_AR_check=nu_nl*epsilon_nl*(w0*I0[m+l]+w1*I1[m+l]+w2*I2[m+l]+w0*I0prime[m+l]+w1*I1prime[m+l]+w2*I2prime[m+l]) # Use of the prime values to check the validity of the symetry around the equator
+			nu_nlm.append(nu_nl + perturb_CF + perturb_AR)
+		#print(nu_nlm)
+		print('I0:', I0)
+		print('I1:', I1)
+		print('I2:', I2)
+		print('I0prime:', I0prime)
+		print('I1prime:', I1prime)
+		print('I2prime:', I2prime)
+		el, em, It=Alm_cpp(l, theta0=np.pi/4, delta=np.pi/2, ftype=ftype) 
+		print('Itot :', It)
+		print('I0 + I1 + I2 =', I0 + I1 + I2)
+		print('(I0 + I1 + I2)*2 =', (I0 + I1 + I2)*2)
+		print('I0 + I1 + I2 + I0prime + I1prime + I2prime =', I0 + I1 + I2 + I0prime + I1prime + I2prime)
+
+		print('perturb_AR =', perturb_AR)
+		print('perturb_AR_check =', perturb_AR_check)
+		exit()
+		acoefs=eval_acoefs(l, nu_nlm)		
+	else:
+		print( "Error: w0+w1+w2 != 1 which is not allowed")
+		print('w0 + w1 + w2 = ', w0+w1+w2)
+		exit()
+	return acoefs
+
 def a2_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l):
 	acoefs=a_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l)
 	return acoefs[1] # returns only the a2 coefficient
@@ -229,8 +302,8 @@ def a2_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolato
 
 def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
 	# Reject out or range solutions for theta0
-	#pena=prior_uniform(theta0, 0, np.pi/2)
-	pena=prior_uniform(theta0, 0, 2*np.pi/3)
+	pena=prior_uniform(theta0, 0, np.pi/2)
+	#pena=prior_uniform(theta0, 0, 2*np.pi/3)
 	# Reject absurd negative solutions and large 'spots' that exceed a pi/4 stellar coverage
 	pena=pena+prior_uniform(delta, 0, np.pi/4)
 
@@ -244,7 +317,8 @@ def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl
-		pena=pena+prior_uniform(epsilon_nl, -0.1, 0.001)
+		#pena=pena+prior_uniform(epsilon_nl, -0.03, 0.03)
+		pena=pena+prior_uniform(epsilon_nl, 0., 0.03)
 	return pena
 
 def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, do_a4=False, do_a6=False,
@@ -622,7 +696,11 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 	a6_obs=np.asarray(a6_obs)
 	sig_a6_obs=np.asarray(sig_a6_obs)
 	#
-	epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	if len(variables) == 4:
+		epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	else:
+		epsilon_nl0, theta0, delta = variables
+		epsilon_nl1=0
 	#
 	# Compute the priors
 	P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta)
@@ -633,8 +711,8 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 		print("      epsilon_nl1 = ", epsilon_nl1)
 		print("      theta0      = ", theta0)
 		print('      delta       = ', delta)
-		print("Debug Exit")
-		exit()
+		#print("Debug Exit")
+		#exit()
 		return -np.inf
 	if np.isnan(P):
 		print("---- GOT A NaN in Prior ----")
@@ -646,7 +724,7 @@ def do_stats_ongrid(variables, l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs
 		print('Imposing -infinity to the Posterior in order to reject the solution')
 		return -np.inf
 	#
-	epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	#epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	a2_nl_mod=[]
 	a4_nl_mod=[]
 	a6_nl_mod=[]	
@@ -789,6 +867,7 @@ def do_stats_ongrid_for_observations(variables, l, a1_obs, a2_obs, sig_a2_obs, a
 			exit()
 	else:
 		do_interpol = True
+	nu_nl_obs=np.asarray(nu_nl_obs)
 	Dnu_obs=np.asarray(Dnu_obs)
 	a1_obs_data=np.asarray(a1_obs)
 	a2_obs_data=np.asarray(a2_obs)
@@ -801,8 +880,11 @@ def do_stats_ongrid_for_observations(variables, l, a1_obs, a2_obs, sig_a2_obs, a
 	for i in range(len(variables)):
 		if relax[i] == False:
 			variables[i]=var_init[i]
-
-	epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	if len(variables) == 4:
+		epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	else:
+		epsilon_nl0, theta0, delta = variables		
+		epsilon_nl1=0
 	#
 	# Compute the priors
 	P=priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta)
@@ -813,8 +895,8 @@ def do_stats_ongrid_for_observations(variables, l, a1_obs, a2_obs, sig_a2_obs, a
 		print("      epsilon_nl1 = ", epsilon_nl1)
 		print("      theta0      = ", theta0)
 		print('      delta       = ', delta)
-		print("Debug Exit")
-		exit()
+		#print("Debug Exit")
+		#exit()
 		return -np.inf
 	if np.isnan(P):
 		print("---- GOT A NaN in Prior ----")
@@ -827,7 +909,7 @@ def do_stats_ongrid_for_observations(variables, l, a1_obs, a2_obs, sig_a2_obs, a
 		print('Imposing -infinity to the Posterior in order to reject the solution')
 		return -np.inf
 	#
-	epsilon_nl0, epsilon_nl1, theta0, delta = variables
+	#epsilon_nl0, epsilon_nl1, theta0, delta = variables
 	a2_nl_mod=[]
 	a4_nl_mod=[]
 	a6_nl_mod=[]	
@@ -841,7 +923,7 @@ def do_stats_ongrid_for_observations(variables, l, a1_obs, a2_obs, sig_a2_obs, a
 		if do_interpol == True:
 			acoefs=a_model_interpol(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, l[i], interpolator_l1, interpolator_l2, interpolator_l3)
 		else:
-			acoefs=a_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta0, ftype, l[i])
+			acoefs=a_model_cpp(nu_nl_obs[i], Dnu_obs[i], a1_obs[i], epsilon_nl, theta0, delta, ftype, l[i])
 		a2_nl_mod.append(float(acoefs[1])*1e3) #  convert a2 in nHz, because we assume here that nu_nl is in microHz
 		a4_nl_mod.append(float(acoefs[3])*1e3) #  convert a4 in nHz, because we assume here that nu_nl is in microHz
 		a6_nl_mod.append(float(acoefs[5])*1e3) #  convert a6 in nHz, because we assume here that nu_nl is in microHz
@@ -936,7 +1018,7 @@ def do_minimise(constants, variables_init):
 
 def do_minimise_aj(constants, variables_init, relax, do_a46=[False, False]):
 	# used_aj (Boolean): [use_a2, use_a4, use_a6]
-	l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs,nu_nl_obs, Dnu_obs, ftype, data_type=constants
+	l, a1_obs, a2_obs, a4_obs, a6_obs, sig_a2_obs, sig_a4_obs,sig_a6_obs,nu_nl_obs, Dnu_obs, ftype, data_type=constants
 	if do_a46[0] == False:
 		a4_obs=[]
 		sig_a4_obs=[]
@@ -952,6 +1034,22 @@ def do_minimise_aj(constants, variables_init, relax, do_a46=[False, False]):
 	#outputs_ml, log_proba_ml = soln.x
 	return soln
 
+def do_emcee_aj(constants, variables_init, relax, do_a46, nwalkers=100, niter=5000):
+	#l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype=constants
+	l, a1_obs, a2_obs, a4_obs, a6_obs, sig_a2_obs, sig_a4_obs,sig_a6_obs,nu_nl_obs, Dnu_obs, ftype, data_type=constants
+	if do_a46[0] == False:
+		a4_obs=[]
+		sig_a4_obs=[]
+	if do_a46[1] == False:
+		a6_obs=[]
+		sig_a6_obs=[]
+	init_vars = variables_init + 1e-4 * np.random.randn(nwalkers, len(variables_init))
+	nwalkers, ndim = init_vars.shape
+	with Pool() as pool:
+		sampler = emcee.EnsembleSampler(
+		    nwalkers, ndim, do_stats_aj, pool=pool, args=(l, a1_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs, nu_nl_obs, Dnu_obs, do_a46, data_type, ftype, relax, variables_init))
+		sampler.run_mcmc(init_vars, niter, progress=True)
+	return sampler
 
 def do_emcee(constants, variables_init, nwalkers=100, niter=5000):
 	#l, a1_obs, a2_obs, sig_a2_obs, nu_nl_obs, Dnu_obs, ftype=constants
@@ -1118,7 +1216,7 @@ def do_posterior_map_preset():
 	fit_acoefs=2 # Use of the mean only
 	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
 
-def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=10, Nmax=20, a1_obs=0, epsilon_nl=[-0.001, 0], fit_type='mean_nu_l', filter_type='gate', update_grid=False, verbose=True, do_a4=True, do_a6=True, err=[1e-1, 1e-1, 1e-1]):
+def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=10, Nmax=20, a1_obs=0, epsilon_nl=[-0.001, 0], dir_posteriors_core=None, fit_type='mean_nu_l', filter_type='gate', update_grid=False, verbose=True, do_a4=True, do_a6=True, err=[1e-1, 1e-1, 1e-1]):
 	# Function that make a grid Posterior in function of theta0 and delta, as per provided by the user
 	# It (1) Generate an emsemble of artificial data for each (theta0_list[i],delta_list[i])  and for the provided epsilion_nl. The content is saved in the dir_obs + '/raw_ajnl'
 	#    (2) In function of the fit_type, it reduces those data to the requested type, providing tiny gaussian errors on the coefficients: 
@@ -1140,7 +1238,10 @@ def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=
 	if filter_type == 'gate':
 		# Main output directory for the results. Subdirectories will be created there
 		#dir_posteriors=dir_core + '/data/Simulations/' + filter_type + '/15-Dec-2021_gridtest_theta0_delta/grids_posterior/' 
-		dir_posteriors=dir_core + '/data/Simulations/' + filter_type + '/Sun/22-Dec-2021/grids_posterior/' 
+		if dir_posteriors_core == None:
+			dir_posteriors=dir_core + '/data/Simulations/' + filter_type + '/grids_posterior/'
+		else:
+			dir_posteriors=dir_posteriors_core + filter_type + '/grids_posterior/'
 		# To change only if you change the grids of Alm:
 		dir_grids=dir_core+"/grids/gate/800pts/"	
 		Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
@@ -1274,7 +1375,7 @@ def make_dir_tree_bias_grid(dir_posteriors, theta0_list, delta_list, epsilon_nl,
 def test_make_dir_tree_bias_grid():
 	dir_posteriors='/Users/obenomar/tmp2/dir_post/'
 	dir_fit_type='mean_nl'
-	epsilon_nl=[-.001,0]
+	epsilon_nl=[.0008,0]
 	theta0_list=[0, 25, 50]
 	delta_list=[5, 20]
 	data_table, combi_file, dir_raw, exist=make_dir_tree_bias_grid(dir_posteriors, theta0_list, delta_list, epsilon_nl, dir_fit_type, combi_file=None, debug=True)
@@ -1294,7 +1395,7 @@ def test_do_posterior_map_bias_grid(update_grid=False):
 	N0=10
 	Nmax=20
 	a1_obs=0. 
-	epsilon_nl=np.asarray([-0.001, 0])
+	epsilon_nl=np.asarray([0.001, 0])
 	fit_type='mean_nu_l'
 	err=[15, 20, 1]
 	#fit_type='mean_l'
@@ -1304,6 +1405,58 @@ def test_do_posterior_map_bias_grid(update_grid=False):
 	do_a6=False
 	do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=Dnu_obs, epsi0=epsi0, N0=N0, Nmax=Nmax, 
 		a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=fit_type, filter_type=filter_type, update_grid=update_grid, do_a4=do_a4, do_a6=do_a6, err=err)
+
+def do_posterior_map_bias_grid_SUN(update_grid=False, err_date='19992002'):
+	#dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/19992002_incfix_fast/'
+	dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/20062009_incfix_fast/'
+	theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
+	delta_list=np.asarray([10, 20, 30, 40])*np.pi/180.
+	Dnu_obs=135.1 #85
+	epsi0=0.3
+	N0=10
+	Nmax=20
+	a1_obs=408.823478
+	epsilon_nl=np.asarray([0.0008, 0])
+	fit_type='mean_nu_l'
+	passed=False
+	if err_date=='19992002':
+		err=[11.221635, 11.103597, 100]
+		passed=True
+	if err_date=='20062009':
+		err=[20.303828, 9.834576, 100]
+		passed=True
+	if passed == False:
+		print("You need to specify a valid err_date argument.")
+		print(" Available arguments are: 19992002 and 20062009")
+		exit()
+	#fit_type='mean_l'
+	#err=[[0.1,0.5], [0.2, 0.4], [0.3,0.6]]
+	filter_type='gate'
+	do_a4=True
+	do_a6=False
+	do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=Dnu_obs, epsi0=epsi0, N0=N0, Nmax=Nmax, 
+		a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=fit_type, dir_posteriors_core=dir_posteriors_core,
+		filter_type=filter_type, update_grid=update_grid, do_a4=do_a4, do_a6=do_a6, err=err)
+
+def do_posterior_map_bias_grid_8379927(update_grid=False):
+	dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/8379927/'
+	theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
+	delta_list=np.asarray([10, 20, 30, 40])*np.pi/180.
+	Dnu_obs=120.01533167
+	epsi0=0.369212948288258
+	N0=18
+	Nmax=26
+	a1_obs=1165.7 
+	epsilon_nl=np.asarray([0.001, 0])
+	fit_type='mean_nu_l'
+	err=[47.863846, 33.484591, 100]
+	filter_type='gate'
+	do_a4=True
+	do_a6=False
+	do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=Dnu_obs, epsi0=epsi0, N0=N0, Nmax=Nmax, 
+		a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=fit_type, dir_posteriors_core=dir_posteriors_core,
+		filter_type=filter_type, update_grid=update_grid, do_a4=do_a4, do_a6=do_a6, err=err)
+
 
 def do_posterior_map_for_observation(Almgridfiles, el , nu_nl_obs, aj, err_aj, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False, do_a6=False, data_type='mean_nu_l'):
 	# One grid for each l in principle. It is up to the user to make sure to have them in the increasing l order: l=1, 2, 3
@@ -1476,24 +1629,6 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 	#
 	print('Grid done')
 
-#def plot_posterior_map(theta, delta, Posterior, posterior_outfile, truncate=None): 	
-#	fig, ax = plt.subplots(2,1)
-#	ax.set_title("Posterior")
-#	ax.set_xlabel('delta (rad)')
-#	ax.set_ylabel('theta (rad)')
-#	if truncate == None:
-#		c = ax.pcolormesh(delta, theta,Posterior, vmin=np.min(Posterior), vmax=np.max(Posterior), shading='auto')
-#	else:
-#		pos=np.where(Posterior <= truncate)
-#		Posterior[pos]=truncate
-#		c = ax.pcolormesh(delta, theta,Posterior, vmin=np.min(Posterior), vmax=np.max(Posterior), shading='auto')		
-#	fig.colorbar(c, ax=ax)
-##	if theta1 != None and delta1 != None:
-##		ax.plot(theta1,delta1,marker='o',size=10)
-#	Ptheta, Pdelta=compute_marginal_distrib(log_p_2d)
-#	fig.savefig(posterior_outfile + '.jpg')
-
-
 def plot_posterior_map_2(theta, delta, Posterior, posterior_outfile, truncate=None): 	
 	gs = gridspec.GridSpec(2, 2, width_ratios=[1,3], height_ratios=[3,1])
 	ax = plt.subplot(gs[0,1])
@@ -1533,25 +1668,35 @@ def compute_marginal_distrib(log_p_2d, normalise=True):
 			p=p+np.exp(yvals[Ny-j-1])
 		Px[i]=p
 	for j in range(Ny):
-		yvals=np.sort(log_p_2d[:,j]) # The array to sum is arranged using sort first. We will sum it by decreasing order of values (regressive order of sort then)
-		p=np.exp(yvals[Nx-1])
+		xvals=np.sort(log_p_2d[:,j]) # The array to sum is arranged using sort first. We will sum it by decreasing order of values (regressive order of sort then)
+		p=np.exp(xvals[Nx-1])
 		for i in range(Nx-1):
-			p=p+np.exp(yvals[Nx-i-1])
+			p=p+np.exp(xvals[Nx-i-1])
 		Py[j]=p
 	if normalise == True:
 		Px=Px/np.sum(Px)
 		Py=Py/np.sum(Py)
 	return Px, Py
 
-def do_minimise_aj_main(Dnu):
-	file='/Users/obenomar/tmp/test_a2AR/tmp/results_postMCMC/19992002_incfix_fast/aj_raw.txt'
+def do_minimise_aj_main(Dnu=135.1, file='/Users/obenomar/tmp/test_a2AR/tmp/results_postMCMC/19992002_incfix_fast/aj_raw.txt'):
+	#file='/Users/obenomar/tmp/test_a2AR/tmp/results_postMCMC/19992002_incfix_fast/aj_raw.txt'
 	data_type='mean_nu_l' # This depends on the fit that was made: mean_nu_l is average aj coefficients 
-	en, el, nu_nl_obs, a1_obs, sig_a1_obs, a2_obs, sig_a2_obs,a3_obs, sig_a3_obs,a4_obs, sig_a4_obs, a5_obs, sig_a5_obs, a6_obs, sig_a6_obs=read_mcmcobs(file)
-	Dnu_obs=np.repeat(Dnu,len(a2_obs))
+	en, el, nu_nl_obs, a1_obs, a2_obs, a3_obs, a4_obs,  a5_obs, a6_obs, sig_a1_obs, sig_a2_obs,sig_a3_obs, sig_a4_obs, sig_a5_obs, sig_a6_obs=read_mcmcobs(file)
+	Dnu_obs=np.repeat(Dnu,len(nu_nl_obs))
+	if len(a1_obs) != len(nu_nl_obs):
+		print('Warning in do_minimise_aj_main():')
+		print('		a1_obs found to be of different size than nu_nl_obs')
+		if len(a1_obs) == 1:
+			print('     a1_obs is of size 1 ==> Replicating the value assuming that the provided parameter is the mean a1_obs')
+		else:
+			print('	Error: a1_obs of size > 1 and != len(nu_nl_obs) Cannot be understood by the code')
+			exit()
+		a1_obs=np.repeat(a1_obs[0],len(nu_nl_obs))
 	#
 	ftype='gate' 
 	labels = ["epsilon_nl0", "epsilon_nl1", "theta0", "delta"]
-	constants=el, a1_obs, a2_obs, sig_a2_obs,a4_obs, sig_a4_obs, a6_obs, sig_a6_obs, nu_nl_obs, Dnu_obs, ftype, data_type
+	constants=el, a1_obs, a2_obs, a4_obs, a6_obs,  sig_a2_obs, sig_a4_obs,sig_a6_obs, nu_nl_obs, Dnu_obs, ftype, data_type
+
 	#variables    
 	epsilon_nl0_init=-1e-3
 	epsilon_nl1_init=0. # no slope initially
@@ -1561,9 +1706,104 @@ def do_minimise_aj_main(Dnu):
 	relax         =[True           ,    False        ,    True    ,    True   ]
 	#do_aj_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init, ftype, fileout='model_plot_init')
 	sols=do_minimise_aj(constants, variables_init, relax, do_a46=[True, False])
-	print(sols.x)
+	outputs=sols.x
+	for i in range(len(labels)):
+		if labels[i] == "theta0" or labels[i] == "delta":
+			extra="  ( " + str(outputs[i]*180./np.pi) + " deg)" 
+		else:
+			extra=""
+		if relax[i] == True:
+			print("{} = {}".format(labels[i], outputs[i]), extra)
+		else:
+			print("{} = {}".format(labels[i], variables_init[i]), extra)	
+			outputs[i]=variables_init[i]
 	#do_aj_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, variables_init, ftype, fileout='model_plot_powell')
-	
+	return outputs, constants, relax, labels
+
+def do_emcee_aj_main(Dnu=None, file='/Users/obenomar/tmp/test_a2AR/tmp/results_postMCMC/19992002_incfix_fast/aj_raw.txt'):
+	os.environ["OMP_NUM_THREADS"] = "4"
+	#variables_init_emcee, constant,relax, labels=do_minimise_aj_main(Dnu=Dnu, file=file)
+	#
+	#ftype='gate'
+	ftype='gate'
+	data_type='mean_nu_l'
+	#labels = ["epsilon_nl0", "epsilon_nl1", "theta0", "delta"]
+	labels = ["epsilon_nl0", "theta0", "delta"]
+	variables_init_emcee=[0.0007018982034645599, 1.1346316727522983, 0.38003851987152]
+	relax=None #[True, False, True,True]
+	en, el, nu_nl_obs, a1_obs, a2_obs, a3_obs, a4_obs,  a5_obs, a6_obs, sig_a1_obs, sig_a2_obs,sig_a3_obs, sig_a4_obs, sig_a5_obs, sig_a6_obs=read_mcmcobs(file)
+	if Dnu == None:
+		pos=np.where(el == 1)
+		fit=np.polyfit(np.linspace(0, len(nu_nl_obs[pos])-1, len(nu_nl_obs[pos])), nu_nl_obs[pos], 1) # WARNING THIS USE l=1, NOT l=0
+		Dnu=fit[0]
+		print('Dnu not  provided... Calculated using provided l=1, Dnu =', Dnu)
+	Dnu_obs=np.repeat(Dnu,len(nu_nl_obs))
+	a1_obs=np.repeat(a1_obs,len(nu_nl_obs))
+	#do_a46=[True,False]
+	do_a46=[False,False]
+	constants=el, a1_obs, a2_obs, a4_obs, a6_obs,  sig_a2_obs, sig_a4_obs,sig_a6_obs, nu_nl_obs, Dnu_obs, ftype, data_type
+	#
+	niter=6000
+	nwalkers=10
+	burnin=500
+	ndim=len(variables_init_emcee)
+	t0=time.time()
+	sampler=do_emcee_aj(constants, variables_init_emcee, relax, do_a46, nwalkers=nwalkers, niter=niter)
+	t1=time.time()
+	#tau = sampler.get_autocorr_time()
+	#
+	tau=[800]
+	print("Autocorrelation time (in steps):", tau)
+	if 2*np.mean(tau) < niter:
+		flat_samples = sampler.get_chain(discard=burnin, thin=3*nwalkers, flat=True)
+		log_posterior = sampler.get_log_prob(discard=burnin, flat=True, thin=3*nwalkers)
+		log_prior = sampler.get_blobs(discard=burnin, flat=True, thin=3*nwalkers)
+	else:
+		flat_samples = sampler.get_chain(discard=0, thin=1, flat=True)
+		log_posterior = sampler.get_log_prob(discard=0, flat=True, thin=nwalkers)
+		log_prior= sampler.get_blobs(discard=0, flat=True, thin=nwalkers)
+	np.save('samples.npy', flat_samples)
+	np.save('logposterior.npy', log_posterior)
+	np.save('logprior.npy', log_prior)
+	#
+	# Saving the likelihood graph
+	fig, ax = plt.subplots()
+	ax.plot(log_posterior)
+	ax.set_xlim(0, len(log_posterior))
+	ax.set_xlabel("step number");
+	fig.savefig('likelihood.jpg')
+	#
+	# Evaluate uncertainties using the samples
+	errors=np.zeros((2,ndim))
+	med=np.zeros(ndim)
+	for i in range(ndim):
+		stats = np.percentile(flat_samples[:, i], [16, 50, 84])
+		print(' stats[',i,'] = ', stats)
+		errors[0,i]=stats[1] - stats[0]
+		errors[1,i]=stats[2] - stats[1]
+		med[i]=stats[1]
+	#
+	# Show summary on the statistics
+	for i in range(len(med)):
+		print(labels[i], ' =', med[i], '  (-  ', errors[0, i], '  ,  +', errors[1,i], ')')
+	print('Computation time (min): ', (t1-t0)/60)
+	#
+	# Samples for each parameter
+	fig, axes = plt.subplots(ndim, figsize=(10, 7), sharex=True)
+	samples = sampler.get_chain()
+	for i in range(ndim):
+		ax = axes[i]
+		ax.plot(samples[:, :, i], "k", alpha=0.3)
+		ax.set_xlim(0, len(samples))
+		ax.set_ylabel(labels[i])
+	#
+	axes[-1].set_xlabel("step number");
+	fig.savefig('params_samples.jpg')
+	#
+	fig = corner.corner(flat_samples, labels=labels, truths=None);
+	fig.savefig('params_pdfs.jpg')
+	#do_a2_model_plot(el, nu_nl_obs, Dnu_obs, a1_obs, a2_obs, sig_a2_obs, med, ftype, fileout='model_plot_emcee.jpg')
+
 def test_do_minimise():
 	os.environ["OMP_NUM_THREADS"] = "4"
 	#
@@ -1639,10 +1879,8 @@ def test_do_minimise():
 		med[i]=stats[1]
 	#
 	# Show summary on the statistics
-	print(labels[0], ' =', med[0], '  (-  ', errors[0, 0], '  ,  +', errors[1,0], ')')
-	print(labels[1],' =', med[1], '  (-  ', errors[0, 1], '  ,  +', errors[1,1], ')')
-	print(labels[2],'=', med[2], '  (-  ', errors[0, 2], '  ,  +', errors[1,2], ')')
-	print(labels[3],' =', med[3], '  (-  ', errors[0, 3], '  ,  +', errors[1,3], ')')
+	for  i in range(ndim):
+		print(labels[i], ' =', med[i], '  (-  ', errors[0, i], '  ,  +', errors[1,i], ')')
 	print('Computation time (min): ', (t1-t0)/60)
 	#
 	# Samples for each parameter

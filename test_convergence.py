@@ -1,4 +1,4 @@
-# Evaluate the difference between outputs in python and outputs in C++
+# Evaluate the difference between outputs in python and outputs in C++ when using Alm
 import numpy as np
 from subprocess import Popen, PIPE
 from activity import Alm as Alm_python

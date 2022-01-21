@@ -104,6 +104,49 @@ def show_filters(theta0=np.pi/6, delta=np.pi/10):
 
 # -----
 
+def tests_gate(l=1,m=1):
+	theta_min=np.asarray([0, 30, 60.])*np.pi/180.
+	theta_max=np.asarray([30, 60, 90])*np.pi/180.
+	
+	I_0_pi=0 # The full integral calculated in segments as per defined in theta_min / theta_max
+	I_0_pi_filt=0 # Same as I_0_pi but when using the filtering function
+	I_0_pi_cpp=0 # For the result of the CPP calculation
+	for i in range(len(theta_min)):
+		theta0=(theta_min[i] + theta_max[i])/2
+		delta=theta_max[i] - theta_min[i]
+		I0=integrate_Alm_gate(l, m, theta0, delta, phi_range=[0, 2*np.pi])
+		I1=integrate_Alm_gate(l, m, np.pi-theta0, delta, phi_range=[0, 2*np.pi])
+		Ifilt=integrate_Alm(l, m, [0, 2*np.pi], [0, np.pi], theta0, delta, ftype='gate')
+		el, em, Ifilt_cpp=Alm_cpp(l, theta0, delta, "gate", raw=False, use2pi=False)
+		I_0_pi=I_0_pi + I0[0]
+		I_0_pi_filt=I_0_pi_filt + Ifilt[0]		
+		I_0_pi_cpp=I_0_pi_cpp+Ifilt_cpp[m-l]
+		print(" (theta_min, theta_max) = ({} , {})".format(theta_min[i], theta_max[i]))
+		print("                 theta0 = ", theta0 )
+		print("                  delta = ", delta )		
+		print("   1. Calculation with direct bundaries: ")
+		print("      North hemishpere:", I0[0])
+		print("      South hemishpere:", I1[0])
+		print("                 Total:", I0[0] + I1[0])
+		print("   2. Calculation with Filter function (Python code): ")
+		print("      North hemishpere: Not available")
+		print("      South hemishpere: Not available")
+		print("                 Total:", Ifilt[0])
+		print("   3. Calculation with Filter function (CPP code): ")
+		print("      North hemishpere: Not available")
+		print("      South hemishpere: Not available")
+		print("                 Total:", Ifilt_cpp[m-l]) # We pick only the compared m
+		print("------")
+		#plt.plot(theta_axis, Y)
+	print(" Integral over the full range 0 - Pi :")
+	print("    1. With direct bundaries (sum of all previous totals) :", 2*I_0_pi)
+	print("    2. With the filter (sum of all previous totals) :", I_0_pi_filt)
+	print("    3. With the CPP code (sum of all previous totals) :", I_0_pi_cpp)
+	print("    4. Direct bundaries: ", integrate_Alm_gate(l, m, np.pi/2, np.pi, phi_range=[0, 2*np.pi]) ) # This is a full window fit [0, Pi]
+	print("    5. Filter function : ", integrate_Alm(l, m, [0, 2*np.pi],[0, np.pi], np.pi/4, np.pi/2, ftype='gate' ) ) # Note that the difference in range with direct bundaries is NORMAL
+	el, em, Int=Alm_cpp(l, np.pi/4, np.pi/2, "gate", raw=False, use2pi=False)
+	print("    6. With the CPP code : ", Int[m-l] ) 
+
 def test_integrate_ylm2(l):
     phi_range = [0, 2.*np.pi]
     theta_range = [0, np.pi/4.]
@@ -117,6 +160,7 @@ def Alm_gate(_theta, _phi, _l, _m, _theta0, _delta):
 	Y=Ylm2(_theta, _phi, _l, _m)
 	F=gate_filter(_theta, _theta0, _delta)
 	return Y*F
+
 
 def Alm_gate_2pi(_theta, _phi, _l, _m, _theta0, _delta):
 	Y=Ylm2(_theta, _phi, _l, _m)
@@ -158,6 +202,14 @@ def integrate_Alm(l, m, phi_range, theta_range, theta0, delta, ftype='gate'):
 			print("    ftype='gate' or  ftype='gauss'")
 			print("The program will exit now ")
 			exit()
+	else:
+		result=[0,0] # When delta is 0, obviously the result is 0
+	return result
+
+def integrate_Alm_gate(l, m, theta0, delta, phi_range=[0, 2*np.pi]):
+	if delta != 0:
+			result = integrate.dblquad(Ylm2,
+		     phi_range[0], phi_range[1], theta0-delta/2, theta0+delta/2, args=(l, m,))
 	else:
 		result=[0,0] # When delta is 0, obviously the result is 0
 	return result
