@@ -300,30 +300,29 @@ def a2_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolato
 	coefs=a_model_interpol(nu_nl, Dnu, a1, epsilon_nl, theta0, delta0, l, interpolator_l1, interpolator_l2)
 	return acoefs[1]
 
-def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta):
+def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta, ftype='gate'):
 	# Reject out or range solutions for theta0
 	pena=prior_uniform(theta0, 0, np.pi/2)
 	#pena=prior_uniform(theta0, 0, 2*np.pi/3)
 	# Reject absurd negative solutions and large 'spots' that exceed a pi/4 stellar coverage
 	pena=pena+prior_uniform(delta, 0, np.pi/4)
-
-	#if theta0 >= (np.pi/2 - delta/2):
-	#	dim=1
-	#	pena=pena-1.
-	#else:
-	#	dim=2
-
-	#pena=pena+prior_jeffreys(delta, 0.02, np.pi/4)
+	 # In the case of a 'gate' prior, We have to exclude theta0 < delta/2 by design because theta_min = theta0 - delta/2  must be in [0,Pi/2]
+	if ftype == 'gate' and (theta0 < delta/2):
+		pena=-np.inf
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl
-		#pena=pena+prior_uniform(epsilon_nl, -0.03, 0.03)
-		pena=pena+prior_uniform(epsilon_nl, 0., 0.03)
+		#pena=pena+prior_uniform(epsilon_nl, 0., 0.03)
+		pena=pena+prior_jeffreys(epsilon_nl, 1e-5, 1e-2)
 	return pena
 
 def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype, do_a4=False, do_a6=False,
 		relerr_a2=None, relerr_a4=None, relerr_a6=None, relerr_epsilon_nl=None, lmax=2):
-	#		
+	#
+	relerr_a2_i=relerr_a2
+	relerr_a4_i=relerr_a4
+	relerr_a6_i=relerr_a6
+	#
 	l_list=[]
 	nu_nl_list=[]
 	a2_list=[]
@@ -350,21 +349,24 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 			acoefs=a_model_cpp(nu_nl, Dnu, a1, e_nl, theta0, delta, ftype, l)
 			a2_true=acoefs[1]
 			if relerr_a2 != None:
-				a2=np.random.normal(a2_true, (relerr_a2[0] + relerr_a2[1]*np.abs(a2_true))/np.sqrt(Nmax-N0))
+				a2=np.random.normal(a2_true, (relerr_a2_i[0] + relerr_a2_i[1]*np.abs(a2_true))/np.sqrt(Nmax-N0))
+				relerr_a2=relerr_a2_i
 			else:
 				a2=a2_true
 				relerr_a2=[0,0]
 			if do_a4 == True:
 				a4_true=acoefs[3]
 				if relerr_a4 != None and l != 1: # l=1 has a4=0 by definition
-					a4=np.random.normal(a4_true, (relerr_a4[0] + relerr_a4[1]*np.abs(a4_true))/np.sqrt(Nmax-N0))
+					a4=np.random.normal(a4_true, (relerr_a4_i[0] + relerr_a4_i[1]*np.abs(a4_true))/np.sqrt(Nmax-N0))
+					relerr_a4=relerr_a4_i
 				else:
 					a4=a4_true
 					relerr_a4=[0,0]
 			if do_a6 == True:
 				a6_true=acoefs[5]	
 				if relerr_a6 != None and l != 1 and l !=2: # l=1 have a4=0, a6=0 and l=2 have a6=0 by definition
-					a6=np.random.normal(a6_true, (relerr_a6[0] + relerr_a6[1]*np.abs(a6_true))/np.sqrt(Nmax-N0))
+					a6=np.random.normal(a6_true, (relerr_a6_i[0] + relerr_a6_i[1]*np.abs(a6_true))/np.sqrt(Nmax-N0))
+					relerr_a6=relerr_a6_i
 				else:
 					a6=a6_true
 					relerr_a6=[0,0]
@@ -375,8 +377,8 @@ def do_simfile(file, Dnu, epsi0, N0, Nmax, a1, epsilon_nl,  theta0, delta, ftype
 			a2_err_list.append((relerr_a2[0] + relerr_a2[1]*a2_true)*1e3)
 			a2_list.append(a2*1e3)
 			a2_true_list.append(a2_true*1e3)
-			if do_a4 == False and do_a6 == False:
-				print(l, nu_nl, a2, a2_true, e_nl, e_nl_true)
+			#if do_a4 == False and do_a6 == False:
+			#	print(l, nu_nl, a2, a2_true, e_nl, e_nl_true)
 			if do_a4 == True and do_a6 == False:
 				if l>=2:
 					a4_err_list.append((relerr_a4[0] + relerr_a4[1]*a4_true)*1e3)
@@ -549,20 +551,30 @@ def reduce_simfile(simfile, fit_type, err=None, outputfile=None):
 			f.write(" {0:10.6f}".format(nu))
 		f.write("\n")
 		if fit_type == 'full_fit':
-			f.write('# Model: aj(nu,l) = aj_0(l) + aj_1(l) * nu(n,l)')
+			f.write('# Model: aj(nu,l) = aj_0(l) + aj_1(l) * nu(n,l)\n')
 			f.write("# Col(0):l, Col(1):a2_0(l), Col(2):a2_1(l), Col(3):a4_0(l), Col(4):a4_1(l), Col(5):a6_0(l), Col(6):a6_1(l), Col(7-8):err_a2, Col(9-10):err_a4, Col(11-12):err_a6\n")		
 			for el in range(1, np.max(l)+1):
-				f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}   {9:0.6f}   {10:0.6f}   {11:0.6f}   {12:0.6f}\n".format(el, 
-					a2_obs_data[el][0], a2_obs_data[el][1], a4_obs_data[el][0], a4_obs_data[el][1], a6_obs_data[el][0], a6_obs_data[el][1], 
-					a2_sig_obs_data[el][0], a2_sig_obs_data[el][1],  a4_sig_obs_data[el][0], a4_sig_obs_data[el][1], a6_sig_obs_data[el][0], a6_sig_obs_data[el][1]))	
+				try:
+					f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}   {9:0.6f}   {10:0.6f}   {11:0.6f}   {12:0.6f}\n".format(el, 
+						a2_obs_data[el][0], a2_obs_data[el][1], a4_obs_data[el][0], a4_obs_data[el][1], a6_obs_data[el][0], a6_obs_data[el][1], 
+						a2_sig_obs_data[el][0], a2_sig_obs_data[el][1],  a4_sig_obs_data[el][0], a4_sig_obs_data[el][1], a6_sig_obs_data[el][0], a6_sig_obs_data[el][1]))	
+				except: # If full error vectors are not given, it is assumed that a single scalar was then given
+					f.write("{0:1d}  	 {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}   {9:0.6f}   {10:0.6f}   {11:0.6f}   {12:0.6f}\n".format(el, 
+						a2_obs_data[el][0], a2_obs_data[el][1], a4_obs_data[el][0], a4_obs_data[el][1], a6_obs_data[el][0], a6_obs_data[el][1], 
+						a2_sig_obs_data, a2_sig_obs_data,  a4_sig_obs_data, a4_sig_obs_data, a6_sig_obs_data, a6_sig_obs_data))	
 		if fit_type == 'mean_l':
+			f.write('# Model: aj(nu) = aj_0 + aj_1 * nu(n,l)\n')
 			f.write("# Col(0):a2_0, Col(1):a2_1, Col(2):a4_0, Col(3):a4_1, Col(4):a6_0, Col(5):a6_1, Col(6-7):err_a2, Col(8-9):err_a4, Col(10-11):err_a6\n")		
-			f.write('# Model: aj(nu) = aj_0 + aj_1 * nu(n,l)')
-			f.write("{0:0.6f}   {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}   {9:0.6f}   {10:0.6f}   {11:0.6f}\n".format(
+			try:
+				f.write("{0:0.6f}   {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}   {9:0.6f}   {10:0.6f}   {11:0.6f}\n".format(
 					a2_obs_data[0], a2_obs_data[1], a4_obs_data[0], a4_obs_data[1], a6_obs_data[0], a6_obs_data[1], 
 					a2_sig_obs_data[0], a2_sig_obs_data[1],  a4_sig_obs_data[0], a4_sig_obs_data[1], a6_sig_obs_data[0], a6_sig_obs_data[1]))
+			except: # If full error vectors are not given, it is assumed that a single scalar was then given
+				f.write("{0:0.6f}   {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}   {6:0.6f}   {7:0.6f}   {8:0.6f}   {9:0.6f}   {10:0.6f}   {11:0.6f}\n".format(
+					a2_obs_data[0], a2_obs_data[1], a4_obs_data[0], a4_obs_data[1], a6_obs_data[0], a6_obs_data[1], 
+					a2_sig_obs_data, a2_sig_obs_data,  a4_sig_obs_data, a4_sig_obs_data, a6_sig_obs_data, a6_sig_obs_data))
 		if fit_type == 'mean_nu_l':
-			f.write('# Model: aj(nu,l) = constant = aj')
+			f.write('# Model: aj(nu,l) = constant = aj\n')
 			f.write("# Col(0):a2, Col(1):a4, Col(2):a6, Col(3):err_a2, Col(4):err_a4, Col(5):err_a6\n")		
 			f.write("{0:0.6f}   {1:0.6f}   {2:0.6f}   {3:0.6f}   {4:0.6f}   {5:0.6f}\n".format(
 					a2_obs_data, a4_obs_data, a6_obs_data, a2_sig_obs_data, a4_sig_obs_data, a6_sig_obs_data))	
@@ -1121,102 +1133,140 @@ def conditional_resize(x, req_length):
 def do_posterior_map_preset():
 	#
 	dir_core='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/'
+	Dnu_obs=85
+	epsi0=0.25
+	N0=8
+	Nmax=14
+	a1_obs=0
+	epsilon_nl0=0.001 # As per set in the simulations
+	epsilon_nl1=0
+	epsilon_nl=[epsilon_nl0, epsilon_nl1]
 	#
 	# To change only if you change the observables:
-	# ------- Case of intermediate activity zone: theta0=60 deg, delta=22 deg -------
-	#obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_2.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
-	#dir_posteriors=dir_core + 'grids_posterior/gate/theta0_1.04_delta0_0.39/effects_of_acoefs_modeling/'
-	# ------- Case of Equatorial activity zone: theta0=90 deg, delta=22 deg -------
-	#obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_3.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
-	#dir_posteriors=dir_core + 'grids_posterior/gate/theta0_1.57_delta0_0.39/effects_of_acoefs_modeling/'
-	# ------- Case of Polar activity zone: theta0=0 deg, delta=22 deg -------
-	obsfile=dir_core+'data/Simulations/gate/simu_tinyerrors_epsicte_4.txt' # This files contains a2,a4 and a6 with tiny uncertainties ==> Used to test the accuracy of the approximation in aj(nu,l)
-	dir_posteriors=dir_core + 'grids_posterior/gate/theta0_0.00_delta0_0.39/effects_of_acoefs_modeling/'
-	#
-	Dnu_obs=85 # As per set in the simulations
-	a1_obs=0   # As per set in the simulations
-	epsilon_nl0=-0.001 # As per set in the simulations
-	epsilon_nl1=0
-	#
+	#relerr_a2=[0.001, 0.0]
+	#relerr_a4=[0.0005, 0.0]
+	#relerr_a6=[0.00025, 0.0]
+	relerr_a2=[0.001, 0.0]
+	relerr_a4=[0.001, 0.0]
+	relerr_a6=[0.0005, 0.0]
+
 	# To change only if you change the grids of Alm:
 	dir_grids=dir_core+"/grids/gate/800pts/"
-	Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
+	Almgridfiles=[dir_grids + 'grid_Alm_1.npz', dir_grids + 'grid_Alm_2.npz', dir_grids + 'grid_Alm_3.npz']
+	#
+	#
 	#
 	# To change in function of the tested scenario:
-	
-	# ----------------- fit with polynomial accounting for nu and l ------------------------
-	# --------- This should be equivalent to fitting directly individual a-coefficients ----
-	# --------------------------------------------------------------------------------------
-	# --- Best case Scenario With 1st order polynoms--- # 
-	do_a4=True # We use a4
-	do_a6=True # We use a6
-	fit_acoefs=0 # We fit full polynomial on nu and l
-	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+	obsfile_list=[dir_core+'grids_posterior/gate/theta0_1.04_delta0_0.349/data/simu_tinyerrors_epsicte_1.txt',
+					dir_core+'grids_posterior/gate/theta0_1.57_delta0_0.349/data/simu_tinyerrors_epsicte_2.txt',
+					dir_core+'grids_posterior/gate/theta0_0.174_delta0_0.349/data/simu_tinyerrors_epsicte_3.txt',
+					dir_core+'grids_posterior/gate/theta0_0.39_delta0_0.78/data/simu_tinyerrors_epsicte_4.txt']
+	dir_posteriors_list=[dir_core + 'grids_posterior/gate/theta0_1.04_delta0_0.349/effects_of_acoefs_modeling/',
+					dir_core + 'grids_posterior/gate/theta0_1.57_delta0_0.349/effects_of_acoefs_modeling/',
+					dir_core + 'grids_posterior/gate/theta0_0.174_delta0_0.349/effects_of_acoefs_modeling/',
+					dir_core + 'grids_posterior/gate/theta0_0.39_delta0_0.78/effects_of_acoefs_modeling/']
+	theta0_list=[1.0471975511965979, 1.5707963267948966, 20*np.pi/180./2, 45*np.pi/180./2] # 60deg , 90deg, polar , polar
+	delta0_list=[0.3490658503988659, 0.3490658503988659, 20*np.pi/180.  , 45*np.pi/180.] # 20deg, 20deg, 20deg, 45deg
+	ftype='gate'
 
-	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	do_a4=True # We use a4
-	do_a6=False # We DO NOT use a6
-	fit_acoefs=0 # We fit full polynomial on nu and l
-	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+	for i in range(1,len(obsfile_list)):
+		obsfile=obsfile_list[i]
+		dir_posteriors=dir_posteriors_list[i]
+		theta0=theta0_list[i]
+		delta0=delta0_list[i]
+		print(' -------------------- ')
+		print('              i =', i)
+		print('        obsfile = ', obsfile)
+		print(' dir_posteriors = ', dir_posteriors)
+		print('         theta0 = ', theta0)
+		print('         delta0 = ', delta0)
+		print(' -------------------- ')
+		#
+		do_simfile(obsfile, Dnu_obs, epsi0, N0, Nmax, a1_obs, epsilon_nl,  theta0, delta0, ftype, 
+			do_a4=True, do_a6=True, relerr_a2=relerr_a2, relerr_a4=relerr_a4, relerr_a6=relerr_a6, relerr_epsilon_nl=None, lmax=3)
+		en, el, nu_nl_obs, a2_obs, sig_a2_obs, a4_obs, sig_a4_obs, a6_obs, sig_a6_obs=read_obsfiles(obsfile, read_a4=True, read_a6=True)
+		Dnu=conditional_resize(Dnu_obs, len(nu_nl_obs))
+		a1=conditional_resize(a1_obs, len(nu_nl_obs))
+		do_a2_model_plot(el, nu_nl_obs, Dnu, a1, a2_obs, sig_a2_obs, None, ftype, fileout=obsfile + '_a2.jpg') # The None is [epsi_nl0, epsi_nl1, theta0, delta] 
+		do_model_plot(el, nu_nl_obs, Dnu, a1, a4_obs, sig_a4_obs, None, None, ftype, fileout=obsfile, aj=4) # The two none are theta0, delta0
+		do_model_plot(el, nu_nl_obs, Dnu, a1, a6_obs, sig_a6_obs, None, None, ftype, fileout=obsfile, aj=6) # The two none are theta0, delta0
+		#exit()
+		# ----------------- fit with polynomial accounting for nu and l ------------------------
+		# --------- This should be equivalent to fitting directly individual a-coefficients ----
+		# --------------------------------------------------------------------------------------
+		# --- Best case Scenario With 1st order polynoms--- # 
+		do_a4=True # We use a4
+		do_a6=True # We use a6
+		fit_acoefs=0 # We fit full polynomial on nu and l
+		posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_tinyerrors_a2a4a6fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	do_a4=False # We use a4
-	do_a6=False # We DO NOT use a6
-	fit_acoefs=0 # We fit full polynomial on nu and l
-	posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
-	#
-	# ----------------- fit with polynomial with nu dependence only (l depedence dropped) ------------------
-	# --------------- This is to test whether we can still constrain the activity that way  ----------------
-	# ------------- It is also similar to the initial fit I made with MCMC that show trends ----------------
-	# ------------------------------------------------------------------------------------------------------
-	# --- Best case Scenario With 1st order polynoms--- # 
-	do_a4=True # We use a4
-	do_a6=True # We use a6
-	fit_acoefs=1 # We fit polynomial on nu only
-	posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+		# --- removing a6 case Scenario With 1st order polynoms--- # 
+		do_a4=True # We use a4
+		do_a6=False # We DO NOT use a6
+		fit_acoefs=0 # We fit full polynomial on nu and l
+		posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_tinyerrors_a2a4fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	do_a4=True # We use a4
-	do_a6=False # We DO NOT use a6
-	fit_acoefs=1 # We fit polynomial on nu
-	posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+		# --- removing a6 case Scenario With 1st order polynoms--- # 
+		do_a4=False # We use a4
+		do_a6=False # We DO NOT use a6
+		fit_acoefs=0 # We fit full polynomial on nu and l
+		posterior_outfile=dir_posteriors + 'nu_and_l_dependence/posterior_800pts_tinyerrors_a2fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+		#
+		# ----------------- fit with polynomial with nu dependence only (l depedence dropped) ------------------
+		# --------------- This is to test whether we can still constrain the activity that way  ----------------
+		# ------------- It is also similar to the initial fit I made with MCMC that show trends ----------------
+		# ------------------------------------------------------------------------------------------------------
+		# --- Best case Scenario With 1st order polynoms--- # 
+		do_a4=True # We use a4
+		do_a6=True # We use a6
+		fit_acoefs=1 # We fit polynomial on nu only
+		posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_tinyerrors_a2a4a6fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	do_a4=False # We use a4
-	do_a6=False # We DO NOT use a6
-	fit_acoefs=1 # We fit polynomial on nu
-	posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+		# --- removing a6 case Scenario With 1st order polynoms--- # 
+		do_a4=True # We use a4
+		do_a6=False # We DO NOT use a6
+		fit_acoefs=1 # We fit polynomial on nu
+		posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_tinyerrors_a2a4fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# -------------- fit with polynomial with mean values only (nu and l depedence dropped) ----------------
-	# --------------- This is to test whether we can still constrain the activity that way  ----------------
-	# ------------------------------------------------------------------------------------------------------
-	# --- Best case Scenario With 1st order polynoms--- # 
-	do_a4=True # We use a4
-	do_a6=True # We use a6
-	fit_acoefs=2 # Use of the mean only
-	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4a6fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+		# --- removing a6 case Scenario With 1st order polynoms--- # 
+		do_a4=False # We use a4
+		do_a6=False # We DO NOT use a6
+		fit_acoefs=1 # We fit polynomial on nu
+		posterior_outfile=dir_posteriors + 'nu_dependence_only/posterior_800pts_tinyerrors_a2fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	do_a4=True # We use a4
-	do_a6=False # We DO NOT use a6
-	fit_acoefs=2 # We fit polynomial on nu
-	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2a4fit.npz'
-	do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+		# -------------- fit with polynomial with mean values only (nu and l depedence dropped) ----------------
+		# --------------- This is to test whether we can still constrain the activity that way  ----------------
+		# ------------------------------------------------------------------------------------------------------
+		# --- Best case Scenario With 1st order polynoms--- # 
+		do_a4=True # We use a4
+		do_a6=True # We use a6
+		fit_acoefs=2 # Use of the mean only
+		posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_tinyerrors_a2a4a6fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-	# --- removing a6 case Scenario With 1st order polynoms--- # 
-	do_a4=False # We use a4
-	do_a6=False # We DO NOT use a6
-	fit_acoefs=2 # Use of the mean only
-	posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_theta2pi_div3_tinyerrors_a2fit.npz'
+		# --- removing a6 case Scenario With 1st order polynoms--- # 
+		do_a4=True # We use a4
+		do_a6=False # We DO NOT use a6
+		fit_acoefs=2 # We Use of the mean only
+		posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_tinyerrors_a2a4fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
 
-def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=10, Nmax=20, a1_obs=0, epsilon_nl=[-0.001, 0], dir_posteriors_core=None, fit_type='mean_nu_l', filter_type='gate', update_grid=False, verbose=True, do_a4=True, do_a6=True, err=[1e-1, 1e-1, 1e-1]):
+		# --- removing a6 case Scenario With 1st order polynoms--- # 
+		do_a4=False # We use a4
+		do_a6=False # We DO NOT use a6
+		fit_acoefs=2 # Use of the mean only
+		posterior_outfile=dir_posteriors + 'mean_only/posterior_800pts_tinyerrors_a2fit.npz'
+		do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile=posterior_outfile, do_a4=do_a4, do_a6=do_a6, fit_acoefs=fit_acoefs)
+
+
+
+def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=10, Nmax=20, a1_obs=0, epsilon_nl=[-0.001, 0], dir_posteriors_core=None, fit_type='mean_nu_l', filter_type='gate', update_grid=False, verbose=True, do_a4=True, do_a6=True, err=[1e-1, 1e-1, 1e-1], dir_core='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/'):
 	# Function that make a grid Posterior in function of theta0 and delta, as per provided by the user
 	# It (1) Generate an emsemble of artificial data for each (theta0_list[i],delta_list[i])  and for the provided epsilion_nl. The content is saved in the dir_obs + '/raw_ajnl'
 	#    (2) In function of the fit_type, it reduces those data to the requested type, providing tiny gaussian errors on the coefficients: 
@@ -1234,7 +1284,8 @@ def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=
 	#										'\' theta0_list[N-1]  ----> delta_list[0]
 	#												  				    ....
 	#																    ----> delta_list[N-1]
-	dir_core='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/'
+	#dir_core='/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/'
+	#dir_core="/Users/obenomar/Work/2022/acoefs_checks_theta/"
 	if filter_type == 'gate':
 		# Main output directory for the results. Subdirectories will be created there
 		#dir_posteriors=dir_core + '/data/Simulations/' + filter_type + '/15-Dec-2021_gridtest_theta0_delta/grids_posterior/' 
@@ -1244,10 +1295,15 @@ def do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=85, epsi0=0, N0=
 			dir_posteriors=dir_posteriors_core + filter_type + '/grids_posterior/'
 		# To change only if you change the grids of Alm:
 		dir_grids=dir_core+"/grids/gate/800pts/"	
-		Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
+		#Almgridfiles=[dir_grids + 'grid_Alm_l1_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l2_thetapi_div2_deltapi_div4_800pts.npz', dir_grids + 'grid_Alm_l3_thetapi_div2_deltapi_div4_800pts.npz']
+		Almgridfiles=[dir_grids + 'grid_Alm_1.npz', dir_grids + 'grid_Alm_2.npz', dir_grids + 'grid_Alm_3.npz']
 	else:
 		print("filter_type != gate is not implemented yet")
 		exit()
+	print("Working directories:")
+	print(" dir_posteriors =", dir_posteriors)
+	print(" dir_grids      =", dir_grids)
+	print(" Almgridfiles   =", Almgridfiles)
 	# Create the directories necessary for the observation files, if they do not exist yet
 	#os.mkdir(dir_obs + 'raw_ajnl')
 	if fit_type == 'mean_nu_l':
@@ -1390,6 +1446,8 @@ def test_make_dir_tree_bias_grid():
 def test_do_posterior_map_bias_grid(update_grid=False):
 	theta0_list=np.asarray([0, 25, 50, 75])*np.pi/180.
 	delta_list=np.asarray([10, 20, 30])*np.pi/180.
+	#theta0_list=np.asarray([10, 20, 30, 40, 50, 60, 70, 80, 90])*np.pi/180.
+	#delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
 	Dnu_obs=135.1 #85
 	epsi0=0.3
 	N0=10
@@ -1406,11 +1464,61 @@ def test_do_posterior_map_bias_grid(update_grid=False):
 	do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=Dnu_obs, epsi0=epsi0, N0=N0, Nmax=Nmax, 
 		a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=fit_type, filter_type=filter_type, update_grid=update_grid, do_a4=do_a4, do_a6=do_a6, err=err)
 
-def do_posterior_map_bias_grid_SUN(update_grid=False, err_date='19992002'):
-	#dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/19992002_incfix_fast/'
-	dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/20062009_incfix_fast/'
-	theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
-	delta_list=np.asarray([10, 20, 30, 40])*np.pi/180.
+def do_posterior_map_bias_grid_PERFECTCASE(update_grid=False):
+        dir_core="/Users/obenomar/Work/2022/acoefs_checks_theta/"
+        dir_posteriors_core="/Users/obenomar/Work/2022/acoefs_checks_theta/tmp/bias_analysis/UltraHighPrecision/"
+        #dir_posteriors_core="/Users/obenomar/tmp/test_a2AR/acoefs_checks_theta/tests/"
+        theta0_list=np.asarray([10, 20, 30, 40, 50, 60, 70, 80, 90])*np.pi/180.
+        delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
+        Dnu_obs=135.1 #85
+        epsi0=0.3
+        N0=10
+        Nmax=20
+        a1_obs=408.823478
+        epsilon_nl=np.asarray([0.0005, 0])
+        fit_type=['mean_nu_l', 'mean_l']#,'full_fit']  We don't do here the full_fit: IT DOES NOT WORK IN THIS FORM
+        err=[0.5, 0.5, 0.5]
+        filter_type='gate'
+        do_a4=[False,True, True]
+        do_a6=[False,False,True]
+        dirs_aj=['a2', 'a2a4', 'a2a4a6']
+        #for i in [0]:
+        for i in range(1,len(do_a4)):
+                dir_posteriors=dir_posteriors_core + dirs_aj[i] + '/'
+                try:
+                        os.mkdir(dir_posteriors)
+                except:
+                        print('Warning in do_posterior_map_bias_grid_PERFECTCASE(): Error while attempting to create the directory for aj analysis')
+                        print('		Directory:' , dir_posteriors)
+                #
+                try:
+                        os.mkdir(dir_posteriors + filter_type)
+                except:
+                        print('Warning in do_posterior_map_bias_grid_PERFECTCASE(): Error while attempting to create the directory for aj analysis')
+                        print('         Directory:' , dir_posteriors + filter_type)
+                #
+                try:
+                        os.mkdir(dir_posteriors + filter_type + '/grids_posterior')
+                except:
+                        print('Warning in do_posterior_map_bias_grid_PERFECTCASE(): Error while attempting to create the directory for aj analysis')
+                        print('         Directory:' , dir_posteriors + filter_type + '/grids_posterior')
+  
+                for ftype in fit_type:
+                #for f in range(2, len(fit_type)):
+                #	ftype=fit_type[f]        
+                	do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=Dnu_obs, epsi0=epsi0, N0=N0, Nmax=Nmax,
+                                a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=ftype, dir_posteriors_core=dir_posteriors,
+                                filter_type=filter_type, update_grid=update_grid, do_a4=do_a4[i], do_a6=do_a6[i], err=err, dir_core=dir_core)
+
+def do_posterior_map_bias_grid_SUN(update_grid=False, err_date='19992002', dir_posteriors_core="/Users/obenomar/Work/2022/acoefs_checks_theta/tmp/bias_analysis/20062009_incfix_fast/"):
+	#dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/19992002_incfix_fast/' # Local
+	#dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/20062009_incfix_fast/' # Local
+	#dir_posteriors_core="/Users/obenomar/Work/2022/acoefs_checks_theta/tmp/bias_analysis/19992002_incfix_fast/" # On MacMini
+	#dir_posteriors_core="/Users/obenomar/Work/2022/acoefs_checks_theta/tmp/bias_analysis/20062009_incfix_fast/" # On MacMini
+	#theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
+	#delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
+	theta0_list=np.asarray([10, 20, 30, 40, 50, 60, 70, 80, 90])*np.pi/180.
+	delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
 	Dnu_obs=135.1 #85
 	epsi0=0.3
 	N0=10
@@ -1440,8 +1548,10 @@ def do_posterior_map_bias_grid_SUN(update_grid=False, err_date='19992002'):
 
 def do_posterior_map_bias_grid_8379927(update_grid=False):
 	dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/8379927/'
-	theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
-	delta_list=np.asarray([10, 20, 30, 40])*np.pi/180.
+	#theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
+	#delta_list=np.asarray([10, 20, 30, 40])*np.pi/180.
+	theta0_list=np.asarray([10, 20, 30, 40, 50, 60, 70, 80, 90])*np.pi/180.
+	delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
 	Dnu_obs=120.01533167
 	epsi0=0.369212948288258
 	N0=18
@@ -1629,19 +1739,26 @@ def do_posterior_map(Almgridfiles, obsfile, Dnu_obs, a1_obs, epsilon_nl0, epsilo
 	#
 	print('Grid done')
 
-def plot_posterior_map_2(theta, delta, Posterior, posterior_outfile, truncate=None): 	
+def plot_posterior_map_2(theta, delta, Posterior, posterior_outfile, truncate=None, log_posterior=False): 	
 	gs = gridspec.GridSpec(2, 2, width_ratios=[1,3], height_ratios=[3,1])
 	ax = plt.subplot(gs[0,1])
 	ax_left = plt.subplot(gs[0,0], sharey=ax)
 	ax_bottom = plt.subplot(gs[1,1], sharex=ax)
 	ax_corner = plt.subplot(gs[1,0])
-
+	if log_posterior == False and truncate != None:
+		print('Error in plot_posterior_map_2():')
+		print('truncation of the Posterior is allowed only when showing the log_posterior (log_posterior = True)')
+		print('Please set the log_posterior to True or set truncate to None')
+		exit()
 	#fig, ax = plt.subplots(2,1)
 	ax.set_title("Posterior")
 	ax_bottom.set_xlabel('delta (rad)')
 	ax_left.set_ylabel('theta (rad)')
 	if truncate == None:
-		c = ax.pcolormesh(delta, theta,Posterior, vmin=np.min(Posterior), vmax=np.max(Posterior), shading='auto')
+		if log_posterior == True:
+			c = ax.pcolormesh(delta, theta,Posterior, vmin=np.min(Posterior), vmax=np.max(Posterior), shading='auto')
+		else:
+			c = ax.pcolormesh(delta, theta,np.exp(Posterior), vmin=np.min(np.exp(Posterior)), vmax=np.max(np.exp(Posterior)), shading='auto')
 	else:
 		pos=np.where(Posterior <= truncate)
 		Post=Posterior

@@ -92,7 +92,6 @@ def read_posteriors(posterior_file, theta0_range=[0, np.pi/2], delta_range=[0, n
 	#print("len(delta) =", len(delta))
 	#print("len(posterior[0,:] =", len(posterior[0,:]))
 	#print("len(posterior[:,0] =", len(posterior[:,0]))
-	#exit()
 	if return_espilon == True:
 		return epsilon, theta0, delta, posterior
 	else:
