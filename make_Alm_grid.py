@@ -62,7 +62,7 @@ def make_Alm_grid(l=1, theta_min=0, theta_max=np.pi/2, delta_min=0, delta_max=np
 	resol_delta=delta[1]-delta[0]
 	return theta, delta, Alm, resol_theta, resol_delta
 
-def do_Alm_grid(outfile='grid_Alm', l=1, resol=np.pi/20, ftype='gauss', theta_min=0, theta_max=np.pi/2, delta_min=0, delta_max=np.pi/4, flatarray=False):
+def do_Alm_grid(outfile='grid_Alm', l=1, resol=np.pi/20, ftype='gate', theta_min=0, theta_max=np.pi/2, delta_min=0, delta_max=np.pi/4, flatarray=False):
 
 	#theta_min=0
 	#theta_max=np.pi/2
@@ -80,6 +80,14 @@ def do_Alm_grid(outfile='grid_Alm', l=1, resol=np.pi/20, ftype='gauss', theta_mi
 	show_Alm_grids(grid, l, filerootjpg=outfile + '_', theta1=None, delta1=None)
 	print('Grid Done')
 
+def do_all_grids(dir_out=None, corefile='grid_Alm', resol=np.pi/20, type='gate'):
+	els=[1,2,3]
+	for l in els:
+		if dir_out != None:
+			outfile=dir_out + '/' + corefile
+		else:
+			outfile=corefile
+		do_Alm_grid(outfile=outfile, l=l, resol=resol, ftype=type, theta_min=0, theta_max=np.pi/2, delta_min=0, delta_max=np.pi/4, flatarray=False)
 
 def show_Alm_grids(grid, l, filerootjpg='grid_Alm_', theta1=None, delta1=None):
 	#grid=np.load(gridfile)
