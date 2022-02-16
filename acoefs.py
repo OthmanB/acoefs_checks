@@ -82,7 +82,7 @@ def eval_acoefs(l, nu_nls): # We expect nu_nls=[nu(-l), nu(-l+1), ... , nu[0], n
 	# Function that gets the splitted frequencies of a given mode (n,l) and determines the analytical a-coefficients
 	# from a1 to a6 and for l<=3
 	if l ==0:
-		print("There is no a1 coefficient for l==0")
+		print("There is no a1 coefficient for l=0")
 	if l == 1: # ALL GOOD
 		a1=(nu_nls[2]- nu_nls[0])/2
 		a2=((nu_nls[0] + nu_nls[2])/2 - nu_nls[1])/3
@@ -121,14 +121,14 @@ def eval_acoefs(l, nu_nls): # We expect nu_nls=[nu(-l), nu(-l+1), ... , nu[0], n
 		Tn33=(nu_nls[6]-nu_nls[0])/6
 		# We have Tnlm = Sum [a_{2j-1} P_{2j-1}] with j=[1,M/2]
 		# a1 term:
-		A0=-14 #1-Pslm(1,3,3)*Pslm(5,3,1)/(Pslm(1,3,1)*Pslm(5,3,3))
-		A1=-3 #1-Pslm(5,3,2)*Pslm(3,3,3)/(Pslm(3,3,2)*Pslm(5,3,3))
-		B0=1 #1/Pslm(1,3,1)
-		B1=-2/3 #2/Pslm(3,3,2)
-		C0=-15 #-3*Pslm(5,3,1)/(Pslm(1,3,1)*Pslm(5,3,3))
-		C1=-4 #-3*Pslm(5,3,2)/(Pslm(3,3,2)*Pslm(5,3,3))
-		D0=18 #Pslm(3,3,3)*Pslm(5,3,1)/(Pslm(1,3,1)*Pslm(5,3,3)) - Pslm(3,3,1)/Pslm(1,3,1)
-		D1=14/3 #Pslm(5,3,2)*Pslm(1,3,3)/(Pslm(3,3,2)*Pslm(5,3,3))-Pslm(1,3,2)/Pslm(3,3,2)
+		#A0=-14 #1-Pslm(1,3,3)*Pslm(5,3,1)/(Pslm(1,3,1)*Pslm(5,3,3))
+		#A1=-3 #1-Pslm(5,3,2)*Pslm(3,3,3)/(Pslm(3,3,2)*Pslm(5,3,3))
+		#B0=1 #1/Pslm(1,3,1)
+		#B1=-2/3 #2/Pslm(3,3,2)
+		#C0=-15 #-3*Pslm(5,3,1)/(Pslm(1,3,1)*Pslm(5,3,3))
+		#C1=-4 #-3*Pslm(5,3,2)/(Pslm(3,3,2)*Pslm(5,3,3))
+		#D0=18 #Pslm(3,3,3)*Pslm(5,3,1)/(Pslm(1,3,1)*Pslm(5,3,3)) - Pslm(3,3,1)/Pslm(1,3,1)
+		#D1=14/3 #Pslm(5,3,2)*Pslm(1,3,3)/(Pslm(3,3,2)*Pslm(5,3,3))-Pslm(1,3,2)/Pslm(3,3,2)
 		#a1=-Tn31*B0/A0 - Tn33*(C0+C1*D0/A1)/A0 - Tn32*D0*B1/(A0*A1)
 		#a1=a1/(1-D0*D1/(A0*A1))
 		a1=Tn31/14 + 2*Tn32/7 + 9*Tn33/14
@@ -145,6 +145,7 @@ def eval_acoefs(l, nu_nls): # We expect nu_nls=[nu(-l), nu(-l+1), ... , nu[0], n
 		Sn32=(nu_nls[1] + nu_nls[5])/2 - nu_nls[3]
 		Sn33=(nu_nls[0] + nu_nls[6])/2 - nu_nls[3]
 		# We have Snlm = Sum[a2j (P2j - P2j(0))] with j=[1, M/2]
+		'''
 		Pi21=Pslm(2,3,1) - Pslm(2,3,0)		
 		Pi22=Pslm(2,3,2) - Pslm(2,3,0)		
 		Pi23=Pslm(2,3,3) - Pslm(2,3,0)		
@@ -154,19 +155,29 @@ def eval_acoefs(l, nu_nls): # We expect nu_nls=[nu(-l), nu(-l+1), ... , nu[0], n
 		Pi61=Pslm(6,3,1) - Pslm(6,3,0)		
 		Pi62=Pslm(6,3,2) - Pslm(6,3,0)		
 		Pi63=Pslm(6,3,3) - Pslm(6,3,0)		
+		'''
 		# a2 term:
-		A=-14 #1- Pi23*Pi61/(Pi21*Pi63)
-		B=0 #-(Pi43*Pi61/(Pi21*Pi63) - Pi41/Pi21)/(1-Pi62/Pi63 * Pi43/Pi42) * (Pi23/Pi42 * Pi62/Pi63 - Pi22/Pi42)
-		C=Sn31/Pi21 - Sn33/Pi21 * Pi61/Pi63
-		D=0 #(Pi43*Pi61/(Pi63*Pi21) - Pi41/Pi21)/(1 - Pi62/Pi63 * Pi43/Pi42) * (Sn32/Pi42 - Sn33/Pi42 * Pi62/Pi63)
-		a2=(C+D)/(A+B)
+		#A=-14 #1- Pi23*Pi61/(Pi21*Pi63)
+		#B=0 #-(Pi43*Pi61/(Pi21*Pi63) - Pi41/Pi21)/(1-Pi62/Pi63 * Pi43/Pi42) * (Pi23/Pi42 * Pi62/Pi63 - Pi22/Pi42)
+		#C=Sn31/Pi21 - Sn33*25/9#/Pi21 * Pi61/Pi63
+		#C=5*Sn31/3 - Sn33*25/9
+		#D=0 #(Pi43*Pi61/(Pi63*Pi21) - Pi41/Pi21)/(1 - Pi62/Pi63 * Pi43/Pi42) * (Sn32/Pi42 - Sn33/Pi42 * Pi62/Pi63)
+		#a2=(C+D)/(A+B)
+		a2=(-15*Sn31 + 25*Sn33)/126
 		# a4 term:
-		E=1- Pi62/Pi63 * Pi43/Pi42
-		F=Sn32/Pi42 - Sn33/Pi42 * Pi62/Pi63
-		G=Pi23/Pi42 * Pi62/Pi63 - Pi22/Pi42
-		a4=(F+ a2*G)/E
+		#E=1- Pi62/Pi63 * Pi43/Pi42
+		#E=1 - 6./39
+		##F=Sn32/Pi42 - Sn33/Pi42 * Pi62/Pi63
+		#F=(-3*Sn32 +  2*Sn33)/39
+		##G=Pi23/Pi42 * Pi62/Pi63 - Pi22/Pi42
+		#G=-6./65
+		##a4=(F+ a2*G)/E
+		a4=((Sn31 - 7*Sn32 + 3*Sn33)/91 )*13/11
 		# a6 term:
-		a6=(Sn33 - a2*Pi23 - a4*Pi43)/Pi63
+		#a6=(Sn33 - a2*Pi23 - a4*Pi43)/Pi63
+		#a6=Sn33/63 + 5*Sn31/462 - Sn32/231 - Sn33/66
+		#a6=Sn33/1386 + 5*Sn31/462 - Sn32/231
+		a6=(15*Sn31 - 6*Sn32 + Sn33)/1386
 	if l>3:
 		print('an for l>3 not implemented. Should you need it, better to solve this algorithmically using equation A3-6 from Schou, JCD, Thompson, 1994')
 		print('The program will return 0 for a1,a2,a3,a4,a5,a6...')
