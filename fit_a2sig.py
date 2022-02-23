@@ -1,5 +1,5 @@
 # Ensemble of functions to perform a fit of a2 terms with emcee of the gaussianised errors 
-from activity import Alm
+from activity import Alm as Alm_py
 from activity import Alm_cpp
 from acoefs import eval_acoefs
 import numpy as np
@@ -210,10 +210,6 @@ def read_reduced_simfile(file, data_type='full_fit'):
 							print('Error: Only fit_type = full_fit and mean_l is so far coded inside read_reduced_simfile()')
 							print('       You need to write the code if you want to use it for other scenarii')
 							exit()
-
-	#print(a2)
-	#print(sig_a2)
-	#exit()
 	return el, nu_nl, a2, sig_a2, a4, sig_a4, a6, sig_a6
 
 def Qlm(l,m):
@@ -221,15 +217,30 @@ def Qlm(l,m):
 	Qlm=(l*(l+1) - 3*m**2)/((2*l - 1)*(2*l + 3))
 	return Qlm*Dnl
 
+def eta0_fct(Dnu=None, rho=None, verbose=False):
+	if rho == None:
+		if Dnu !=None:
+			Dnu_sun=135.1
+			#numax_sun=3150.
+			R_sun=6.96342e5 #in km
+			M_sun=1.98855e30 #in kg
+			rho_sun=M_sun*1e3/(4*np.pi*(R_sun*1e5)**3/3) #in g.cm-3
+			rho=(Dnu/Dnu_sun)**2 * rho_sun
+			if verbose == True:
+				print('Computing rho using Dnu...')
+				print(' rho =', rho)
+		else:
+			print('Error in eta0(): You need to provide at least one of the following argument:')
+			print('                 - Dnu')
+			print('                 - rho')
+			exit()
+	G=6.667e-8 # cm3.g-1.s-2
+	#eta0=3./(4.*np.pi*rho*G) # second^2 # WRONG BECAUSE WE ASSUMED OMEGA ~ a1. IT SHOULD BE OMEGA ~ 2.pi.a1
+	eta0=3.*np.pi/(rho*G)
+	return eta0
+
 def nu_CF(nu_nl, Dnu, a1, l, m, a1_unit='nHz'):
-   Dnu_sun=135.1
-   numax_sun=3150.
-   R_sun=6.96342e5 #in km
-   M_sun=1.98855e30 #in kg
-   G=6.667e-8
-   rho_sun=M_sun*1e3/(4*np.pi*(R_sun*1e5)**3/3) #in g.cm-3
-   rho=(Dnu/Dnu_sun)**2 * rho_sun
-   eta0=3./(4.*np.pi*rho*G); 
+   eta0=eta0_fct(Dnu=Dnu, rho=None)
    if a1_unit == 'nHz':
    	return eta0*nu_nl * (a1*1e-9)**2 * Qlm(l,m)
    if a1_unit == 'microHz':
@@ -240,7 +251,7 @@ def nu_CF(nu_nl, Dnu, a1, l, m, a1_unit='nHz'):
    	exit()
 
 def nu_AR(nu_nl, epsilon_nl, theta0, delta, ftype, l, m):
-	return nu_nl*epsilon_nl*Alm(l,m, theta0=theta0, delta=delta, ftype=ftype)
+	return nu_nl*epsilon_nl*Alm_cpp(l,m, theta0=theta0, delta=delta, ftype=ftype)
 
 def a2_CF(nu_nl, Dnu, a1, l):
 	nu_nlm=[]
@@ -280,11 +291,15 @@ def a_model_cpp(nu_nl, Dnu, a1, epsilon_nl, theta0, delta, ftype, l, Alm_vals=No
 		el, em, Alm=Alm_cpp(l, theta0=theta0, delta=delta, ftype=ftype) # Array of m E [-l,l]
 	else:
 		Alm=Alm_vals[l-1] # Alm_vals contains a list of Alms for l=1,2,3 (index 0,1,2)
+	#print('---------')
 	for m in range(-l, l+1):	
 		perturb_CF=nu_CF(nu_nl, Dnu, a1, l, m)
 		perturb_AR=nu_nl*epsilon_nl*Alm[m+l]
+		#Alm_python=Alm_py(l,m, theta0=theta0, delta=delta, ftype=ftype)
+		#dnu_AR=nu_nl*epsilon_nl*Alm_python
+		#print('perturb_AR = ', perturb_AR)
+		#print('perturb_CF =', perturb_CF)
 		nu_nlm.append(nu_nl + perturb_CF + perturb_AR)
-	#print(nu_nlm)
 	acoefs=eval_acoefs(l, nu_nlm)
 	return acoefs # returns all a-coeficients 
 
@@ -394,7 +409,7 @@ def priors_model(nu_nl_obs, epsilon_nl0, epsilon_nl1, theta0, delta, ftype='gate
 	# impose the negativity of the epsilon coefficient, as it is for the Sun
 	for i in range(len(nu_nl_obs)):
 		epsilon_nl=epsilon_nl0 + epsilon_nl1*nu_nl_obs[i]*1e-3 # linear term for epsilon_nl
-		pena=pena+prior_uniform(epsilon_nl, 0., 0.03)
+		pena=pena+prior_uniform(epsilon_nl, 0., 0.015)
 		#pena=pena+prior_jeffreys(epsilon_nl, 1e-5, 1e-2)
 	return pena
 
@@ -1717,7 +1732,7 @@ def do_posterior_map_bias_grid_PERFECTCASE():
                                 a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=ftype, dir_posteriors_core=dir_posteriors,
                                 filter_type=filter_type, do_a4=do_a4[i], do_a6=do_a6[i], err=err, dir_core=dir_core)
 
-def do_posterior_map_bias_grid_SUN(err_date='19992002', dir_posteriors_core="/Users/obenomar/Work/2022/acoefs_checks_theta/tmp/bias_analysis/20062009_incfix_fast/"):
+def do_posterior_map_bias_grid_SUN(err_date='19992002', dir_posteriors_core="/Users/obenomar/Work/2022/tmp/bias_analysis/20062009_incfix_fast/"):
 	dir_core="/Users/obenomar/Work/2022/"
 	theta0_list=np.asarray([10, 20, 30, 40, 50, 60, 70, 80, 90])*np.pi/180.
 	delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
@@ -1746,10 +1761,8 @@ def do_posterior_map_bias_grid_SUN(err_date='19992002', dir_posteriors_core="/Us
 		a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=fit_type, dir_posteriors_core=dir_posteriors_core,
 		filter_type=filter_type, do_a4=do_a4, do_a6=do_a6, err=err, dir_core=dir_core)
 
-def do_posterior_map_bias_grid_8379927():
-	dir_posteriors_core='/Users/obenomar/tmp/test_a2AR/tmp/bias_analysis/8379927/'
-	#theta0_list=np.asarray([0, 25, 50, 75, 90])*np.pi/180.
-	#delta_list=np.asarray([10, 20, 30, 40])*np.pi/180.
+def do_posterior_map_bias_grid_8379927(dir_posteriors_core="/Users/obenomar/Work/2022/tmp/bias_analysis/8379927/"):
+	dir_core="/Users/obenomar/Work/2022/"
 	theta0_list=np.asarray([10, 20, 30, 40, 50, 60, 70, 80, 90])*np.pi/180.
 	delta_list=np.asarray([5, 10, 20, 30, 40])*np.pi/180.
 	Dnu_obs=120.01533167
@@ -1757,15 +1770,15 @@ def do_posterior_map_bias_grid_8379927():
 	N0=18
 	Nmax=26
 	a1_obs=1165.7 
-	epsilon_nl=np.asarray([0.001, 0])
-	fit_type='mean_nu_l'
+	epsilon_nl=np.asarray([0.0005, 0])
+	fit_type='mean_nu_l'	
 	err=[47.863846, 33.484591, 100]
 	filter_type='gate'
 	do_a4=True
 	do_a6=False
 	do_posterior_map_bias_grid(theta0_list, delta_list, Dnu_obs=Dnu_obs, epsi0=epsi0, N0=N0, Nmax=Nmax, 
 		a1_obs=a1_obs, epsilon_nl=epsilon_nl, fit_type=fit_type, dir_posteriors_core=dir_posteriors_core,
-		filter_type=filter_type, update_grid=update_grid, do_a4=do_a4, do_a6=do_a6, err=err)
+		filter_type=filter_type, do_a4=do_a4, do_a6=do_a6, err=err, dir_core=dir_core)
 
 
 def do_posterior_map_for_observation(Almgridfiles, el , nu_nl_obs, aj, err_aj, Dnu_obs, a1_obs, epsilon_nl0, epsilon_nl1, posterior_outfile='posterior_grid.npz', do_a4=False, do_a6=False, data_type='mean_nu_l'):

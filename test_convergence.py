@@ -1,8 +1,10 @@
-# Evaluate the difference between outputs in python and outputs in C++ when using Alm
+# Evaluate the difference between outputs in python and outputs in C++
 import numpy as np
 from subprocess import Popen, PIPE
 from activity import Alm as Alm_python
+from activity import Alm_cpp
 
+'''
 def Alm_cpp(l, theta0, delta, ftype, raw=False):
 	process = Popen(["./Alm", str(l), str(theta0), str(delta), ftype], stdout=PIPE, stderr=PIPE)
 	(output, err) = process.communicate()
@@ -30,7 +32,7 @@ def Alm_cpp(l, theta0, delta, ftype, raw=False):
 	else:
 		return output, err
 	return -1, -1
-
+'''
 def test():
 	print("Test program for Alm computation")
 	print("   This is to verify that the Alm computation in C++ matches the computation made in Python")
@@ -45,6 +47,7 @@ def test():
 	thetas=np.linspace(0, np.pi, Ntests_theta)
 	deltas=np.linspace(0,np.pi/2, Ntests_delta)
 	err=False
+	err_limit=1e-3
 	for l in els:
 		for theta0 in thetas:
 			for delta in deltas:
@@ -56,10 +59,13 @@ def test():
 				for i in range(len(m_c)):
 					dif=100*(Alm_c[i]-Alm_py[i])/Alm_py[i]
 					print("theta0 =", theta0,   "    delta =:", delta, "   l =", l_c[i], "   m =",m_c[i], "   Alm_cpp =", Alm_c[i], "   Alm_py =", Alm_py[i],   "    Dif (no unit)", Alm_c[i]-Alm_py[i], "    Delta (%) = ", dif)
-					if dif >= 0.1 and Alm_py[i] != 0:
-						print("          WARNING: DIFFERENCE EXCEDING 1% WAS FOUND")
+					#if dif >= 0.1 and Alm_py[i] != 0:
+					#	print("          WARNING: DIFFERENCE EXCEDING 1% WAS FOUND")
+					#	err=True
+					if Alm_c[i]-Alm_py[i] >= err_limit:
+						print("          WARNING: DIFFERENCE EXCEDING {0:0.7f} WAS FOUND. This is {1:0.4f}% of the full scale [0,1]".format(err_limit, err_limit*100))
 						err=True
 	if err == True:
-		print("Discrepancies between the C++ and the Python routine found. Please check their significance...")
+		print("Discrepancies between exceeding {} in absolute value between the C++ and the Python routine found. Please check their significance...".format(err_limit))
 
 #test()
