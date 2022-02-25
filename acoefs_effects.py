@@ -8,6 +8,7 @@ from acoefs import *
 from fit_a2sig import Qlm
 from fit_a2sig import eta0_fct
 from fit_a2sig import a_model_cpp
+from termcolor import colored
 
 def Lorentzian(nu, nu_nlm, H_nlm, W_nlm):
     L=H_nlm/(1. + 4.*(nu - nu_nlm)**2 / W_nlm**2)
@@ -80,15 +81,13 @@ def acoefs_epsilon(l, a1=2500, Dnu=135.1, nu_nl=3150., ftype='gate'):
     '''
     eps_min=0.0
     eps_max=0.0015
-    epsilon_nl=np.linspace(eps_min, eps_max,14)
+    epsilon_nl=np.linspace(eps_min, eps_max,31)
 
-    #theta0=np.pi/2
-    #delta=2*np.pi*8.4/180.
+    #theta0_eq=85*np.pi/180.
+    #delta_eq=10.*np.pi/180.
     theta0_eq=(90-8.4/2)*np.pi/180.
     delta_eq=8.4*np.pi/180.
     #
-    #theta_polar=0.
-    #delta_polar=np.pi*45./180.
     theta_polar=(45./2.)*np.pi/180.
     delta_polar=np.pi*45/180.
     ftype='gate'
@@ -103,9 +102,18 @@ def acoefs_epsilon(l, a1=2500, Dnu=135.1, nu_nl=3150., ftype='gate'):
         #print('theta0=', theta0_eq, '  delta=', delta_eq)
         anl_eq=a_model_cpp(nu_nl, Dnu, a1, epsi, theta0_eq, delta_eq, ftype, l, Alm_vals=None) # CF + AR
         anl_polar=a_model_cpp(nu_nl, Dnu, a1, epsi, theta_polar, delta_polar, ftype, l, Alm_vals=None) # CF + AR
+        anl_eq=np.asarray(anl_eq, dtype=float)*1000
+        anl_polar=np.asarray(anl_polar, dtype=float)*1000
         acoefs_eq.append(anl_eq)
         acoefs_polar.append(anl_polar)
-        print('  epsi =', epsi,  '    anl_eq:', anl_eq ,  '    anl_polar:', anl_polar)
+        s=colored("  epsi = {0:0.6f} ".format(epsi), 'red')
+        s=s+ " anl_eq:"
+        for j in range(len(anl_eq)):
+            s=s+ colored(" {0:0.4f}".format(anl_eq[j]),'blue')
+        s=s + " anl_polar:"
+        for j in range(len(anl_polar)):
+            s=s+ colored(" {0:0.4f}".format(anl_polar[j]), 'magenta')        
+        print(s)
     return epsilon_nl, acoefs_eq, acoefs_polar
 
 def a2_epsilon_plot(lrange=[1,2, 3], colors=['Blue', 'Orange', 'Red'], ftype='gate'):
@@ -113,12 +121,17 @@ def a2_epsilon_plot(lrange=[1,2, 3], colors=['Blue', 'Orange', 'Red'], ftype='ga
         Make same plots than Fig3 of Gizon2004 AN 323, 251
         We impose basically the same values as what Gizon2004 did
     '''
-    a1=2500 # nHz
+    Dnu=135.1 # Sun
+    a1=2000. # 5 a1_sun nHz 
+    nu_nl=3150 # Sun numax
+    #Dnu=103.4 # 16 Cyg A
+    #a1=1000 # nHz
+    #nu_nl=2150 # nHz (numax 16 Cyg A)
     j=0
     #lrange[1]=lrange[1]
     for l in lrange:
         print('l =', l)
-        epsilon_nl, acoefs_eq, acoefs_polar=acoefs_epsilon(l, a1=a1, Dnu=135.1, nu_nl=3150.,ftype=ftype)
+        epsilon_nl, acoefs_eq, acoefs_polar=acoefs_epsilon(l, a1=a1, Dnu=Dnu, nu_nl=nu_nl,ftype=ftype)
         a2_eq=[row[1] for row in acoefs_eq]
         #a4_eq=[row[3] for row in acoefs_eq]
         #a6_eq=[row[5] for row in acoefs_eq]
@@ -126,18 +139,19 @@ def a2_epsilon_plot(lrange=[1,2, 3], colors=['Blue', 'Orange', 'Red'], ftype='ga
         #a4_polar=[row[3] for row in acoefs_polar]
         #a6_polar=[row[5] for row in acoefs_polar]
         #
-        a2_CF=a2_eq[0]
-        a2_AR_eq=a2_eq[1:]
-        a2_AR_polar=a2_polar[1:]
+        a2_CF=a2_eq[0]*1000
+        a2_AR_eq=np.asarray(a2_eq[1:])*1000
+        a2_AR_polar=np.asarray(a2_polar[1:])*1000
         #print('a2_CF:', a2_CF)
         #print('a2_eq:', a2_eq)
         #print('a2_polar:', a2_polar)
         plt.plot(epsilon_nl[1:], a2_AR_eq, color=colors[j], linestyle='--')
         plt.plot(epsilon_nl[1:], a2_AR_polar, color=colors[j], linestyle='dashdot')
         plt.plot(epsilon_nl, np.repeat(a2_CF,len(epsilon_nl)), linestyle='solid', color=colors[j])
+        plt.axvline(x=5e-4, linestyle='--', color='black') # Show the solar value
         j=j+1
     #
-    plt.ylabel='a2 (microHz)'
+    plt.ylabel='a2 (nHz)'
     plt.xlabel='epsilon'
     plt.xscale('log')
     plt.xlim=[0.0001, 0.001]
