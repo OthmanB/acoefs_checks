@@ -65,11 +65,10 @@ def eval_aj_mean_range(Mass=1., Radius=1., Teff=5777, epsilon_nl=5*1e-4, a1=1000
 	#
 	theta, delta, Alm= load_Alm_grids(dir_grids, gridfiles, lmax=lmax)
 	#
-	a2_min=9999
-	a2_max=-9999
-	a4_min=9999
-	a4_max=-9999
-	#nu_nlm_all=[]
+	a2_min=99999
+	a2_max=-99999
+	a4_min=99999
+	a4_max=-99999
 	for j in range(len(theta)):
 		for k in range(len(delta)):
 			aj=np.zeros(6)
@@ -81,21 +80,27 @@ def eval_aj_mean_range(Mass=1., Radius=1., Teff=5777, epsilon_nl=5*1e-4, a1=1000
 					# perturbation from CF
 					dnu_CF=eta0*numax * (a1*1e-9)**2 * Qlm(l,m)
 					nu_nlm.append(numax + dnu_AR + dnu_CF)
-				#nu_nlm_all.append([l,nu_nlm]) # Keep memory of all groups of modes (for debug)
+					#print('(j,k) = (', j, ',', k,')  theta =', theta[j]*180./np.pi, "  delta =", delta[k]*180./np.pi, " dnu_AR =", dnu_AR*1000)
 				a=eval_acoefs(l, nu_nlm)
-				#print(a)
 				# Averaging over l
-				for j in range(len(aj)):
-					aj[j]=aj[j] + a[j]
-			aj=aj/lmax
-			#print('aj = ', aj)
+				for o in range(len(aj)):
+					if o < 2:
+						aj[o]=aj[o] + a[o]/lmax
+					if o >=2 and o < 4:
+						if l>=2:
+							aj[o]=aj[o] + a[o]/(lmax-1)
+					if o >=3 and o <6:
+						if l>=3:
+							aj[o]=aj[o] + a[o]/(lmax-2)
+#					if j==10 and k==10: # For debug only
+#						print('a[{}] = {}'.format(o, a[o]))
+#			if j==10 and k==10 and l==lmax: # For debug only
+#				print('aj = ', aj)
+#				exit()
 			a2_min=update_min(aj[1], a2_min)
 			a2_max=update_max(aj[1], a2_max)
 			a4_min=update_min(aj[3], a4_min)
 			a4_max=update_max(aj[3], a4_max)
-	#for nu in nu_nlm_all:
-	#	print("l=", nu[0], '   nu_nlm=', nu[1])
-
 	return [a2_min*1e3, a2_max*1e3], [a4_min*1e3, a4_max*1e3] # aj converted into nHz
 
 
@@ -106,27 +111,29 @@ rho_sun=M_sun/V * 1e-12 # Conversion into g/cm-3
 # Table of M, R derived from Bellinger+2019 (https://www.aanda.org/articles/aa/pdf/2019/02/aa34461-18.pdf)
 # Only Sun, Min and Max of his range are kept
 # Teff are comming from Pinsonault+2012 or Davies+2016 (or Campante+2015)
-'''
+
 # USE THIS PART TO STUDY THE MAXIMUM POTENTIAL RANGE OF a2 and a4 FOR KEPLER OBSERVATIONS
 KIC=['6278762', 'Sun'    , '6679371' , '7199397' ]
 M=[0.753      ,   1      ,  1.570    , 1.308]
 R=[0.7588     ,   1      ,  2.222    , 2.526]
 rho=[1.741    , rho_sun  , 0.1432    ,  0.0821]
 T=[5046       , 5777.    , 6551      ,  5821.]
-epsilon_nl=5e-3
+epsilon_nl=5e-4
 a1=[500,  1000, 1500, 2000, 2500]
-'''
+
 # USE THIS PART FOR GETTING SPECIFIC EXPECTED MAXIMUM RANGE FOR THE REFERENCE STAR OF SIMULATION: 16 CYG A
 # Data from Bellinger+2019 for M, R, rho. Teff from Ramirez+2009 (and Metcalfe+2012)
 # a1 is set as per the simulations and epsilon_nl is the solar value
+'''
 KIC=['12069424']
 M=[1.056]
 R=[1.213]
 T=[5825]
 rho=[1.531]
 a1=[1000]
-epsilon_nl=5e-4
+epsilon_nl=5e-4 # Solar Value
 print('epsilon_nl :', epsilon_nl)
+'''
 for j in range(len(M)):
 	print(colored('KIC =', 'red'), KIC[j])
 	print('Mass: ', M[j],  '   Radius: ', R[j],   '    Teff: ', T[j])
